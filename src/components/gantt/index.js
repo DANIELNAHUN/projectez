@@ -1,0 +1,5 @@
+export { default as GanttChart } from './GanttChart.vue'
+export { default as GanttTimeline } from './GanttTimeline.vue'
+export { default as GanttGrid } from './GanttGrid.vue'
+export { default as GanttTaskBar } from './GanttTaskBar.vue'
+export { default as GanttContextMenu } from './GanttContextMenu.vue'

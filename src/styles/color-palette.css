@@ -1,0 +1,266 @@
+/* Color Palette -06 - Paleta de colores tierra personalizada */
+
+:root {
+    /* Colores principales de la paleta */
+    --color-earth-dark-olive: #3E350E;
+    --color-earth-golden: #DAAD29;
+    --color-earth-light-gray: #EAE9E7;
+    --color-earth-brown: #794515;
+    --color-earth-olive: #79792E;
+    --color-earth-light-yellow: #F2DD6C;
+
+    /* Variaciones de tonos para diferentes usos */
+    --color-primary: #DAAD29;
+    --color-primary-dark: #3E350E;
+    --color-primary-light: #F2DD6C;
+
+    --color-secondary: #794515;
+    --color-secondary-dark: #3E350E;
+    --color-secondary-light: #EAE9E7;
+
+    --color-accent: #79792E;
+    --color-accent-light: #F2DD6C;
+
+    /* Colores de estado usando la paleta */
+    --color-success: #79792E;
+    /* Verde oliva para éxito */
+    --color-warning: #DAAD29;
+    /* Dorado para advertencias */
+    --color-error: #794515;
+    /* Marrón para errores */
+    --color-info: #3E350E;
+    /* Verde oscuro para información */
+
+    /* Colores de fondo */
+    --color-bg-primary: #EAE9E7;
+    /* Gris claro como fondo principal */
+    --color-bg-secondary: #F2DD6C;
+    /* Amarillo claro como fondo secundario */
+    --color-bg-dark: #3E350E;
+    /* Verde oscuro para fondos oscuros */
+
+    /* Colores de texto */
+    --color-text-primary: #3E350E;
+    /* Verde oscuro para texto principal */
+    --color-text-secondary: #794515;
+    /* Marrón para texto secundario */
+    --color-text-light: #EAE9E7;
+    /* Gris claro para texto en fondos oscuros */
+    --color-text-accent: #DAAD29;
+    /* Dorado para texto de acento */
+
+    /* Colores de borde */
+    --color-border-light: #EAE9E7;
+    --color-border-medium: #DAAD29;
+    --color-border-dark: #3E350E;
+}
+
+/* Clases de utilidad para la paleta de colores */
+.bg-earth-dark-olive {
+    background-color: var(--color-earth-dark-olive);
+}
+
+.bg-earth-golden {
+    background-color: var(--color-earth-golden);
+}
+
+.bg-earth-light-gray {
+    background-color: var(--color-earth-light-gray);
+}
+
+.bg-earth-brown {
+    background-color: var(--color-earth-brown);
+}
+
+.bg-earth-olive {
+    background-color: var(--color-earth-olive);
+}
+
+.bg-earth-light-yellow {
+    background-color: var(--color-earth-light-yellow);
+}
+
+.text-earth-dark-olive {
+    color: var(--color-earth-dark-olive);
+}
+
+.text-earth-golden {
+    color: var(--color-earth-golden);
+}
+
+.text-earth-light-gray {
+    color: var(--color-earth-light-gray);
+}
+
+.text-earth-brown {
+    color: var(--color-earth-brown);
+}
+
+.text-earth-olive {
+    color: var(--color-earth-olive);
+}
+
+.text-earth-light-yellow {
+    color: var(--color-earth-light-yellow);
+}
+
+.border-earth-dark-olive {
+    border-color: var(--color-earth-dark-olive);
+}
+
+.border-earth-golden {
+    border-color: var(--color-earth-golden);
+}
+
+.border-earth-light-gray {
+    border-color: var(--color-earth-light-gray);
+}
+
+.border-earth-brown {
+    border-color: var(--color-earth-brown);
+}
+
+.border-earth-olive {
+    border-color: var(--color-earth-olive);
+}
+
+.border-earth-light-yellow {
+    border-color: var(--color-earth-light-yellow);
+}
+
+/* Gradientes usando la paleta */
+.bg-gradient-earth-warm {
+    background: linear-gradient(135deg, var(--color-earth-light-yellow), var(--color-earth-golden));
+}
+
+.bg-gradient-earth-natural {
+    background: linear-gradient(135deg, var(--color-earth-light-gray), var(--color-earth-olive));
+}
+
+.bg-gradient-earth-rich {
+    background: linear-gradient(135deg, var(--color-earth-brown), var(--color-earth-dark-olive));
+}
+
+/* Sombras usando los colores de la paleta */
+.shadow-earth-soft {
+    box-shadow: 0 4px 6px -1px rgba(62, 53, 14, 0.1), 0 2px 4px -1px rgba(62, 53, 14, 0.06);
+}
+
+.shadow-earth-medium {
+    box-shadow: 0 10px 15px -3px rgba(62, 53, 14, 0.1), 0 4px 6px -2px rgba(62, 53, 14, 0.05);
+}
+
+.shadow-earth-strong {
+    box-shadow: 0 20px 25px -5px rgba(62, 53, 14, 0.1), 0 10px 10px -5px rgba(62, 53, 14, 0.04);
+}
+
+/* Estados hover y focus usando la paleta */
+.hover-earth-golden:hover {
+    background-color: var(--color-earth-golden);
+    color: var(--color-earth-dark-olive);
+}
+
+.hover-earth-olive:hover {
+    background-color: var(--color-earth-olive);
+    color: var(--color-earth-light-gray);
+}
+
+.focus-earth {
+    outline: 2px solid var(--color-earth-golden);
+    outline-offset: 2px;
+}
+
+/* Componentes específicos con la nueva paleta */
+.btn-earth-primary {
+    background-color: var(--color-earth-golden);
+    color: var(--color-earth-dark-olive);
+    border: 1px solid var(--color-earth-golden);
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    font-weight: 500;
+    transition: all 0.2s ease-in-out;
+}
+
+.btn-earth-primary:hover {
+    background-color: var(--color-earth-dark-olive);
+    color: var(--color-earth-light-gray);
+    border-color: var(--color-earth-dark-olive);
+}
+
+.btn-earth-secondary {
+    background-color: var(--color-earth-light-gray);
+    color: var(--color-earth-dark-olive);
+    border: 1px solid var(--color-earth-olive);
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    font-weight: 500;
+    transition: all 0.2s ease-in-out;
+}
+
+.btn-earth-secondary:hover {
+    background-color: var(--color-earth-olive);
+    color: var(--color-earth-light-gray);
+}
+
+.card-earth {
+    background-color: var(--color-earth-light-gray);
+    border: 1px solid var(--color-earth-golden);
+    border-radius: 0.75rem;
+    box-shadow: var(--shadow-earth-soft);
+}
+
+.input-earth {
+    background-color: var(--color-earth-light-gray);
+    border: 1px solid var(--color-earth-olive);
+    color: var(--color-earth-dark-olive);
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    transition: all 0.2s ease-in-out;
+}
+
+.input-earth:focus {
+    outline: none;
+    border-color: var(--color-earth-golden);
+    box-shadow: 0 0 0 3px rgba(218, 173, 41, 0.1);
+}
+
+/* Estados de proyecto usando la paleta */
+.project-status-active-earth {
+    background-color: var(--color-earth-olive);
+}
+
+.project-status-completed-earth {
+    background-color: var(--color-earth-golden);
+}
+
+.project-status-paused-earth {
+    background-color: var(--color-earth-brown);
+}
+
+.project-status-cancelled-earth {
+    background-color: var(--color-earth-dark-olive);
+}
+
+/* Indicadores de progreso */
+.progress-bar-earth {
+    background: linear-gradient(to right, var(--color-earth-golden), var(--color-earth-olive));
+}
+
+/* Badges y etiquetas */
+.badge-earth-primary {
+    background-color: var(--color-earth-light-yellow);
+    color: var(--color-earth-dark-olive);
+    padding: 0.25rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.badge-earth-secondary {
+    background-color: var(--color-earth-olive);
+    color: var(--color-earth-light-gray);
+    padding: 0.25rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}

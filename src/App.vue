@@ -1,0 +1,50 @@
+<script setup>
+import { onMounted } from 'vue'
+import AppLayout from './components/common/AppLayout.vue'
+import ErrorBoundary from './components/common/ErrorBoundary.vue'
+import StorageErrorHandler from './components/common/StorageErrorHandler.vue'
+import { useErrorHandler } from './composables/useErrorHandler.js'
+import { useStorageError } from './composables/useStorageError.js'
+
+const { handleError } = useErrorHandler()
+const { checkStorageHealth } = useStorageError()
+
+// Initialize error handling and storage checks
+onMounted(async () => {
+  try {
+    // Check storage health on app startup
+    await checkStorageHealth()
+    
+    // Setup global error listeners
+    setupGlobalErrorHandling()
+  } catch (error) {
+    handleError(error, 'App initialization')
+  }
+})
+
+const setupGlobalErrorHandling = () => {
+  // Handle storage events
+  window.addEventListener('storage', (event) => {
+    if (event.key?.startsWith('pm_')) {
+      console.log('Storage changed externally:', event.key)
+      // Could trigger a refresh or sync
+    }
+  })
+  
+  // Handle online/offline events
+  window.addEventListener('online', () => {
+    console.log('Connection restored')
+  })
+  
+  window.addEventListener('offline', () => {
+    console.log('Connection lost')
+  })
+}
+</script>
+
+<template>
+  <ErrorBoundary>
+    <StorageErrorHandler />
+    <AppLayout />
+  </ErrorBoundary>
+</template>
