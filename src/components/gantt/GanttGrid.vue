@@ -16,7 +16,7 @@
 
     <!-- Task list -->
     <div class="grid-body">
-      <div v-for="(task, index) in tasks" :key="task.id" style="height: auto;"
+      <div v-for="(task, index) in tasks" :key="task.id" :style="{ height: taskRowHeight + 'px' }"
         class="task-row flex items-center px-4 border-b border-gray-50 hover:bg-gray-25 transition-colors"
         :class="getTaskRowClasses(task)">
         <!-- Task hierarchy and title -->
@@ -179,6 +179,7 @@ const getAssignedUserName = (userId) => {
   flex-direction: column;
   min-width: 300px;
   max-width: 400px;
+  height: fit-content;
 }
 
 .grid-header {
@@ -188,7 +189,8 @@ const getAssignedUserName = (userId) => {
 
 .grid-body {
   flex: 1;
-  overflow-y: auto;
+  overflow-y: visible;
+  height: auto;
 }
 
 .task-row {

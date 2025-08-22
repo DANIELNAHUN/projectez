@@ -40,7 +40,7 @@
       </div>
 
       <!-- Task bars -->
-      <div class="task-bars">
+      <div class="task-bars" :style="{ height: (tasks.length * taskRowHeight) + 'px' }">
         <div 
           v-for="(task, index) in tasks" 
           :key="task.id"
@@ -479,7 +479,8 @@ const getWeekNumber = (date) => {
 .gantt-timeline {
   position: relative;
   background-color: #ffffff;
-  min-height: 400px;
+  min-height: fit-content;
+  height: auto;
 }
 
 .timeline-header {
@@ -501,12 +502,19 @@ const getWeekNumber = (date) => {
 
 .timeline-body {
   position: relative;
+  min-height: fit-content;
+  height: auto;
 }
 
 /* Task bar styles moved to GanttTaskBar component */
 
 .grid-line {
   pointer-events: none;
+}
+
+.task-bars {
+  position: relative;
+  min-height: 200px;
 }
 
 .task-row {

@@ -58,7 +58,8 @@
       <!-- Task grid (left side) -->
       <div class="gantt-sidebar-container relative" :class="{ 'minimized': isSidebarMinimized }" :style="{
         backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-        borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+        borderColor: isDarkMode ? '#374151' : '#e5e7eb',
+        alignSelf: 'flex-start'
       }">
 
         <!-- Sidebar toggle button -->
@@ -73,7 +74,7 @@
         </button>
 
         <!-- Minimized sidebar (icons only) -->
-        <div v-if="isSidebarMinimized" class="minimized-sidebar">
+        <div v-if="isSidebarMinimized" class="minimized-sidebar" :style="{ height: timelineMinHeight + 'px' }">
           <!-- Header -->
           <div class="minimized-header border-b p-2 text-center"
             :style="{ borderColor: isDarkMode ? '#374151' : '#e5e7eb' }">
@@ -89,7 +90,8 @@
             <div v-else v-for="task in ganttTasks" :key="task.id"
               class="minimized-task-item relative flex flex-col items-center p-1 rounded cursor-pointer transition-all duration-200"
               :class="{ 'opacity-60': task.status === 'cancelled' }" :style="{
-                marginLeft: (task.level * 2) + 'px'
+                marginLeft: (task.level * 2) + 'px',
+                height: '40px'
               }" :title="`${task.title} - ${task.progress}% completado`" @click="handleMinimizedTaskClick(task)"
               @mouseover="$event.target.style.backgroundColor = isDarkMode ? '#374151' : '#f3f4f6'"
               @mouseleave="$event.target.style.backgroundColor = 'transparent'">
@@ -115,7 +117,9 @@
       <!-- Timeline (right side) -->
       <div class="gantt-timeline-container flex-1 overflow-x-auto border-l" :style="{
         backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-        borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+        borderColor: isDarkMode ? '#374151' : '#e5e7eb',
+        alignSelf: 'flex-start',
+        minHeight: timelineMinHeight + 'px'
       }">
         <GanttTimeline :timeline-start="timelineStart" :timeline-end="timelineEnd" :zoom-level="zoomLevel"
           :tasks="ganttTasks" :total-width="totalTimelineWidth" @task-date-change="handleTaskDateChange"
@@ -201,6 +205,16 @@ const criticalPath = computed(() => store.getters['gantt/criticalPath'])
 const totalTimelineWidth = computed(() => store.getters['gantt/totalTimelineWidth'])
 const isLoading = computed(() => store.getters['gantt/isLoading'])
 const error = computed(() => store.getters['gantt/error'])
+
+// Calculate timeline minimum height based on content
+const timelineMinHeight = computed(() => {
+  const headerHeight = 60 // Timeline header height
+  const taskRowHeight = 40 // Height per task row
+  const minTasks = Math.max(ganttTasks.value.length, 10) // Minimum 10 rows for better UX
+  const padding = 20 // Extra padding
+  
+  return headerHeight + (minTasks * taskRowHeight) + padding
+})
 
 // Get current project
 const currentProject = computed(() => {
@@ -355,6 +369,7 @@ onMounted(() => {
 
 .gantt-content {
   min-height: 400px;
+  align-items: flex-start;
 }
 
 .gantt-sidebar-container {
@@ -363,6 +378,7 @@ onMounted(() => {
   width: 30%;
   transition: all 0.3s ease;
   border-right: 1px solid;
+  height: fit-content;
 }
 
 .gantt-sidebar-container.minimized {
@@ -386,9 +402,10 @@ onMounted(() => {
 
 .minimized-sidebar {
   width: 100%;
-  height: 100%;
   display: flex;
   flex-direction: column;
+  height: fit-content;
+  min-height: 400px;
 }
 
 .minimized-header {
@@ -401,13 +418,14 @@ onMounted(() => {
 
 .minimized-tasks {
   flex: 1;
-  overflow-y: auto;
+  overflow-y: visible;
+  height: auto;
 }
 
 .minimized-task-item {
   width: 32px;
-  height: 32px;
   margin: 0 auto;
+  justify-content: center;
 }
 
 .sidebar-toggle-btn:hover {
