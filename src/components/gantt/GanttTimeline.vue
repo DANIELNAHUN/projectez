@@ -113,7 +113,7 @@ const props = defineProps({
 const emit = defineEmits(['task-date-change', 'task-select', 'task-edit', 'task-duplicate', 'task-add-subtask', 'task-status-change', 'task-delete'])
 
 // Constants
-const taskRowHeight = 40
+const taskRowHeight = 20
 const dayWidth = computed(() => {
   switch (props.zoomLevel) {
     case 'days': return 30

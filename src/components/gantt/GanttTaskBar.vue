@@ -1,54 +1,38 @@
 <template>
-  <div
-    :style="{
-      left: position + 'px',
-      width: width + 'px',
-      backgroundColor: task.color,
-      top: '4px',
-      bottom: '4px'
-    }"
-    class="gantt-task-bar absolute rounded cursor-pointer shadow-sm hover:shadow-md transition-all duration-200"
-    :class="[getTaskBarClasses(), { 'gantt-task-bar--dragging': isDragging }]"
-    @mousedown="startDrag"
-    @click="selectTask"
-    @contextmenu.prevent="showContextMenu"
-    :title="getTaskTooltip()"
-  >
+  <div :style="{
+    left: position + 'px',
+    width: width + 'px',
+    backgroundColor: task.color,
+    top: '4px',
+    bottom: '4px'
+  }" class="gantt-task-bar absolute rounded cursor-pointer shadow-sm hover:shadow-md transition-all duration-200"
+    :class="[getTaskBarClasses(), { 'gantt-task-bar--dragging': isDragging }]" @mousedown="startDrag"
+    @click="selectTask" @contextmenu.prevent="showContextMenu" :title="getTaskTooltip()">
     <!-- Progress indicator -->
-    <div 
-      v-if="task.progress > 0"
-      :style="{ width: task.progress + '%' }"
-      class="progress-indicator absolute inset-y-0 left-0 bg-black bg-opacity-20 rounded-l"
-    ></div>
-    
-    <!-- Task title (if there's space) -->
-    <div 
-      v-if="width > 60"
-      class="task-title absolute inset-0 flex items-center px-2 text-xs text-white font-medium truncate"
-    >
-      {{ task.title }}
+    <div v-if="task.progress > 0" :style="{ width: task.progress + '%' }"
+      class="progress-indicator absolute inset-y-0 left-0 bg-black bg-opacity-20 rounded-l"></div>
+
+    <!-- Task title inside the bar -->
+    <div
+      class="task-title absolute inset-y-0 left-0 flex items-center px-2 text-xs text-gray-800 font-medium whitespace-nowrap z-10">
+      {{ truncatedTitle }}
     </div>
-    
+
     <!-- Resize handles -->
-    <div 
+    <div
       class="resize-handle resize-left absolute left-0 top-0 bottom-0 w-1 cursor-ew-resize opacity-0 hover:opacity-100 bg-white bg-opacity-50"
-      @mousedown.stop="startResize('left', $event)"
-    ></div>
-    <div 
+      @mousedown.stop="startResize('left', $event)"></div>
+    <div
       class="resize-handle resize-right absolute right-0 top-0 bottom-0 w-1 cursor-ew-resize opacity-0 hover:opacity-100 bg-white bg-opacity-50"
-      @mousedown.stop="startResize('right', $event)"
-    ></div>
-    
+      @mousedown.stop="startResize('right', $event)"></div>
+
     <!-- Hierarchy connector lines -->
-    <div 
-      v-if="task.level > 0"
-      class="hierarchy-line absolute -left-4 top-1/2 w-4 h-px bg-gray-300"
-    ></div>
+    <div v-if="task.level > 0" class="hierarchy-line absolute -left-4 top-1/2 w-4 h-px bg-gray-300"></div>
   </div>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { ref, computed } from 'vue'
 
 const props = defineProps({
   task: {
@@ -78,6 +62,15 @@ const emit = defineEmits(['task-select', 'task-drag', 'task-resize', 'context-me
 // Local state for drag feedback
 const isDragging = ref(false)
 
+// Computed property for truncated title
+const truncatedTitle = computed(() => {
+  const maxLength = 30
+  if (props.task.title.length <= maxLength) {
+    return props.task.title
+  }
+  return props.task.title.substring(0, maxLength - 3) + '...'
+})
+
 // Computed properties
 const getTaskBarClasses = () => {
   return {
@@ -100,7 +93,7 @@ const getTaskTooltip = () => {
   const endDate = new Date(props.task.end).toLocaleDateString('es-ES')
   const duration = props.task.duration
   const progress = props.task.progress
-  
+
   return `${props.task.title}\n${startDate} - ${endDate}\nDuración: ${duration} día${duration !== 1 ? 's' : ''}\nProgreso: ${progress}%`
 }
 
@@ -117,14 +110,14 @@ const startDrag = (event) => {
     startPosition: props.position,
     type: 'move'
   })
-  
+
   // Listen for drag end
   const handleDragEnd = () => {
     isDragging.value = false
     document.removeEventListener('mouseup', handleDragEnd)
   }
   document.addEventListener('mouseup', handleDragEnd)
-  
+
   event.preventDefault()
 }
 
@@ -137,14 +130,14 @@ const startResize = (direction, event) => {
     startWidth: props.width,
     direction: direction
   })
-  
+
   // Listen for resize end
   const handleResizeEnd = () => {
     isDragging.value = false
     document.removeEventListener('mouseup', handleResizeEnd)
   }
   document.addEventListener('mouseup', handleResizeEnd)
-  
+
   event.preventDefault()
 }
 
@@ -162,6 +155,7 @@ const showContextMenu = (event) => {
   border-radius: 4px;
   transition: all 0.2s ease;
   position: relative;
+  overflow: visible;
 }
 
 .gantt-task-bar:hover {
@@ -199,6 +193,9 @@ const showContextMenu = (event) => {
 .task-title {
   user-select: none;
   pointer-events: none;
+  overflow: visible;
+  white-space: nowrap;
+  min-width: max-content;
 }
 
 .resize-handle {
