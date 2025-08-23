@@ -208,10 +208,13 @@ export default {
     const handleTaskSubmit = async (taskData) => {
       try {
         if (selectedTask.value) {
-          // Update existing task
+          // Update existing task - preserve original parentTaskId and level
           await store.dispatch('tasks/updateTask', {
+            ...selectedTask.value,
             ...taskData,
-            id: selectedTask.value.id
+            id: selectedTask.value.id,
+            parentTaskId: selectedTask.value.parentTaskId,
+            level: selectedTask.value.level
           })
           toast.add({
             severity: 'success',

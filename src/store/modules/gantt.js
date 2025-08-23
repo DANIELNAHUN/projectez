@@ -181,9 +181,15 @@ const actions = {
     commit('SET_ERROR', null)
     
     try {
+      // Get the current task to preserve all properties
+      const currentTask = rootGetters['tasks/getTaskById'](taskId)
+      if (!currentTask) {
+        throw new Error('Task not found')
+      }
+      
       // Update the task in the tasks store
       dispatch('tasks/updateTask', {
-        id: taskId,
+        ...currentTask,
         startDate: newStart,
         endDate: newEnd
       }, { root: true })
@@ -213,7 +219,7 @@ const actions = {
             childNewEnd.setDate(childNewEnd.getDate() + daysDelta)
             
             dispatch('tasks/updateTask', {
-              id: childTask.id,
+              ...childTask,
               startDate: childNewStart,
               endDate: childNewEnd
             }, { root: true })
@@ -245,15 +251,20 @@ const actions = {
       const earliestStart = new Date(Math.min(...childStartDates))
       const latestEnd = new Date(Math.max(...childEndDates))
       
+      // Get the current parent task to preserve all properties
+      const parentTask = rootGetters['tasks/getTaskById'](parentId)
+      if (!parentTask) {
+        throw new Error('Parent task not found')
+      }
+      
       // Update the parent task to span all children
       dispatch('tasks/updateTask', {
-        id: parentId,
+        ...parentTask,
         startDate: earliestStart,
         endDate: latestEnd
       }, { root: true })
       
       // Check if this parent also has a parent
-      const parentTask = rootGetters['tasks/getTaskById'](parentId)
       if (parentTask && parentTask.parentTaskId) {
         dispatch('updateParentTaskDates', { 
           parentId: parentTask.parentTaskId, 
@@ -324,7 +335,7 @@ const actions = {
         newEnd.setDate(newEnd.getDate() + taskDuration)
         
         dispatch('tasks/updateTask', {
-          id: task.id,
+          ...task,
           startDate: newStart,
           endDate: newEnd
         }, { root: true })

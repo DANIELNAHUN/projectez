@@ -303,7 +303,7 @@ const handleTaskAddSubtask = (parentTask) => {
 
 const handleTaskStatusChange = ({ task, status }) => {
   store.dispatch('tasks/updateTask', {
-    id: task.id,
+    ...task,
     status: status,
     progress: status === 'completed' ? 100 : task.progress
   }).then(() => {
