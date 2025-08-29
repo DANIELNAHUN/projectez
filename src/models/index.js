@@ -1,4 +1,5 @@
 // Data models and interfaces for the Personal Project Manager
+import { DateCalculationService } from '../services/dateCalculationService.js';
 
 /**
  * Project interface
@@ -29,7 +30,72 @@ export class Project {
   }
 
   generateId() {
-    return 'project_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    return 'project_' + Date.now() + '_' + Math.random().toString(36).substring(2, 11);
+  }
+
+  /**
+   * Adjust all project dates when project start date changes
+   * @param {Date} newStartDate - New project start date
+   */
+  adjustProjectDates(newStartDate) {
+    if (!newStartDate) {
+      throw new Error('New start date is required');
+    }
+
+    const newStart = newStartDate instanceof Date ? newStartDate : new Date(newStartDate);
+    
+    if (!DateCalculationService.validateDateRange(newStart, this.endDate)) {
+      console.warn('New start date is after project end date');
+    }
+
+    // Calculate the difference in working days
+    const isMovingForward = newStart >= this.startDate;
+    let daysDifference;
+    
+    if (isMovingForward) {
+      daysDifference = DateCalculationService.calculateWorkingDays(this.startDate, newStart);
+    } else {
+      daysDifference = DateCalculationService.calculateWorkingDays(newStart, this.startDate);
+    }
+
+    // Adjust all task dates
+    this.tasks.forEach(task => {
+      try {
+        if (isMovingForward) {
+          // Moving project forward in time
+          task.startDate = DateCalculationService.addWorkingDays(task.startDate, daysDifference);
+        } else {
+          // Moving project backward in time
+          task.startDate = DateCalculationService.subtractWorkingDays(task.startDate, daysDifference);
+        }
+        
+        // Recalculate end date based on task duration
+        task.endDate = task.calculateEndDate(task.startDate, task.duration);
+        task.updatedAt = new Date();
+      } catch (error) {
+        console.warn(`Error adjusting dates for task ${task.id}:`, error.message);
+      }
+    });
+
+    // Update project start date
+    this.startDate = newStart;
+    this.updatedAt = new Date();
+  }
+
+  /**
+   * Recalculate project end date based on latest task end date
+   */
+  recalculateProjectEndDate() {
+    if (this.tasks.length === 0) {
+      return;
+    }
+
+    const latestEndDate = this.tasks.reduce((latest, task) => {
+      return task.endDate > latest ? task.endDate : latest;
+    }, this.tasks[0].endDate);
+
+    this.endDate = latestEndDate;
+    this.updatedAt = new Date();
   }
 
   toJSON() {
@@ -78,6 +144,8 @@ export class Task {
     progress = 0,
     subtasks = [],
     level = 0,
+    duration = null,
+    adjustStartDate = false,
     createdAt = new Date(),
     updatedAt = new Date()
   } = {}) {
@@ -96,12 +164,122 @@ export class Task {
     this.progress = Math.max(0, Math.min(100, progress));
     this.subtasks = subtasks;
     this.level = level;
+    this.adjustStartDate = adjustStartDate;
     this.createdAt = createdAt instanceof Date ? createdAt : new Date(createdAt);
     this.updatedAt = updatedAt instanceof Date ? updatedAt : new Date(updatedAt);
+    
+    // Calculate duration if not provided
+    this.duration = duration !== null ? duration : this.calculateDuration(this.startDate, this.endDate);
   }
 
   generateId() {
-    return 'task_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    return 'task_' + Date.now() + '_' + Math.random().toString(36).substring(2, 11);
+  }
+
+  /**
+   * Calculate duration in working days between start and end dates
+   * @param {Date} startDate - Start date
+   * @param {Date} endDate - End date
+   * @returns {number} Duration in working days
+   */
+  calculateDuration(startDate, endDate) {
+    try {
+      return DateCalculationService.calculateWorkingDays(startDate, endDate);
+    } catch (error) {
+      console.warn('Error calculating duration:', error.message);
+      return 0;
+    }
+  }
+
+  /**
+   * Calculate end date based on start date and duration
+   * @param {Date} startDate - Start date
+   * @param {number} duration - Duration in working days
+   * @returns {Date} Calculated end date
+   */
+  calculateEndDate(startDate, duration) {
+    try {
+      return DateCalculationService.addWorkingDays(startDate, duration);
+    } catch (error) {
+      console.warn('Error calculating end date:', error.message);
+      return new Date(startDate);
+    }
+  }
+
+  /**
+   * Calculate start date based on end date and duration
+   * @param {Date} endDate - End date
+   * @param {number} duration - Duration in working days
+   * @returns {Date} Calculated start date
+   */
+  calculateStartDate(endDate, duration) {
+    try {
+      return DateCalculationService.subtractWorkingDays(endDate, duration);
+    } catch (error) {
+      console.warn('Error calculating start date:', error.message);
+      return new Date(endDate);
+    }
+  }
+
+  /**
+   * Update duration when dates change
+   */
+  updateDuration() {
+    this.duration = this.calculateDuration(this.startDate, this.endDate);
+    this.updatedAt = new Date();
+  }
+
+  /**
+   * Update end date when duration changes (default behavior)
+   */
+  updateEndDate() {
+    if (!this.adjustStartDate) {
+      this.endDate = this.calculateEndDate(this.startDate, this.duration);
+      this.updatedAt = new Date();
+    }
+  }
+
+  /**
+   * Update start date when duration changes (if adjustStartDate flag is true)
+   */
+  updateStartDate() {
+    if (this.adjustStartDate) {
+      this.startDate = this.calculateStartDate(this.endDate, this.duration);
+      this.updatedAt = new Date();
+    }
+  }
+
+  /**
+   * Set new duration and update dates accordingly
+   * @param {number} newDuration - New duration in working days
+   */
+  setDuration(newDuration) {
+    this.duration = newDuration;
+    if (this.adjustStartDate) {
+      this.updateStartDate();
+    } else {
+      this.updateEndDate();
+    }
+  }
+
+  /**
+   * Set new start date and update duration or end date
+   * @param {Date} newStartDate - New start date
+   */
+  setStartDate(newStartDate) {
+    this.startDate = newStartDate instanceof Date ? newStartDate : new Date(newStartDate);
+    this.updateDuration();
+    this.updatedAt = new Date();
+  }
+
+  /**
+   * Set new end date and update duration or start date
+   * @param {Date} newEndDate - New end date
+   */
+  setEndDate(newEndDate) {
+    this.endDate = newEndDate instanceof Date ? newEndDate : new Date(newEndDate);
+    this.updateDuration();
+    this.updatedAt = new Date();
   }
 
   toJSON() {
@@ -121,6 +299,8 @@ export class Task {
       progress: this.progress,
       subtasks: this.subtasks,
       level: this.level,
+      duration: this.duration,
+      adjustStartDate: this.adjustStartDate,
       createdAt: this.createdAt.toISOString(),
       updatedAt: this.updatedAt.toISOString()
     };
@@ -131,6 +311,8 @@ export class Task {
       ...data,
       startDate: new Date(data.startDate),
       endDate: new Date(data.endDate),
+      duration: data.duration,
+      adjustStartDate: data.adjustStartDate || false,
       createdAt: new Date(data.createdAt),
       updatedAt: new Date(data.updatedAt)
     });
@@ -157,7 +339,7 @@ export class TeamMember {
   }
 
   generateId() {
-    return 'member_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    return 'member_' + Date.now() + '_' + Math.random().toString(36).substring(2, 11);
   }
 
   toJSON() {
