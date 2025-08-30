@@ -452,7 +452,14 @@ const generateProject = async () => {
     
     if (result.success) {
       generatedProject.value = result.project
-      addMessage('system', `✅ ¡Proyecto generado exitosamente! Se crearon ${result.project.tasks.length} tareas con una duración estimada de ${result.project.estimatedDuration} días laborales.`)
+      let successMessage = `✅ ¡Proyecto generado exitosamente! Se crearon ${result.project.tasks.length} tareas con una duración estimada de ${result.project.estimatedDuration} días laborales.`
+      
+      // Add retry information if applicable
+      if (result.retryCount > 0) {
+        successMessage += ` (Completado después de ${result.retryCount} reintento${result.retryCount > 1 ? 's' : ''})`
+      }
+      
+      addMessage('system', successMessage)
       
       // Set default start date to tomorrow
       const tomorrow = new Date()
@@ -460,15 +467,34 @@ const generateProject = async () => {
       importStartDate.value = tomorrow.toISOString().split('T')[0]
       
     } else {
-      const errorMsg = result.errors.length > 0 ? result.errors[result.errors.length - 1] : 'Error desconocido'
-      addMessage('error', `❌ Error al generar el proyecto: ${errorMsg}`)
+      // Enhanced error reporting
+      const primaryError = result.errors.length > 0 ? result.errors[result.errors.length - 1] : 'Error desconocido'
+      addMessage('error', `❌ Error al generar el proyecto: ${primaryError}`)
       
+      // Show retry information
       if (result.retryCount > 0) {
-        addMessage('system', `Se realizaron ${result.retryCount} intentos de reintento.`)
+        addMessage('system', `Se realizaron ${result.retryCount} intentos automáticos. Tiempo total: ${Math.round(result.totalTime / 1000)}s`)
+      }
+      
+      // Show specific guidance based on error type
+      if (result.errors.some(e => e.includes('quota'))) {
+        addMessage('system', '💡 Sugerencia: Verifica tu configuración de facturación en OpenAI')
+      } else if (result.errors.some(e => e.includes('api key'))) {
+        addMessage('system', '💡 Sugerencia: Verifica que tu clave API sea válida')
+      } else if (result.errors.some(e => e.includes('rate limit'))) {
+        addMessage('system', '💡 Sugerencia: Espera unos minutos antes de intentar nuevamente')
       }
     }
   } catch (error) {
     addMessage('error', `❌ Error inesperado: ${error.message}`)
+    
+    // Log detailed error for debugging
+    console.error('AI Project Generation Error:', {
+      error: error.message,
+      stack: error.stack,
+      prompt: prompt.substring(0, 100) + '...',
+      options
+    })
   } finally {
     isGenerating.value = false
   }

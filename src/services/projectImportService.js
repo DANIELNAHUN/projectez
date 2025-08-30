@@ -462,47 +462,405 @@ export class ProjectImportService {
   }
 
   /**
-   * Import project with comprehensive error handling
+   * Import project with comprehensive error handling and recovery
    * @param {string} jsonData - JSON string containing project data
    * @param {Object} options - Import options
    * @returns {Object} Import result with success status and details
    */
   static importProjectSafe(jsonData, options = {}) {
-    const { newStartDate = null, validateOnly = false } = options;
+    const { 
+      newStartDate = null, 
+      validateOnly = false,
+      skipValidation = false,
+      autoFix = true 
+    } = options;
     
     const result = {
       success: false,
       project: null,
       errors: [],
       warnings: [],
-      validation: null
+      validation: null,
+      fixes: [],
+      importTime: 0
     };
 
-    try {
-      // First validate the JSON structure
-      result.validation = this.validateProjectJSON(jsonData);
-      result.warnings = result.validation.warnings;
+    const startTime = Date.now();
 
-      if (!result.validation.isValid) {
-        result.errors = result.validation.errors;
-        return result;
+    try {
+      // Enhanced JSON validation
+      if (!skipValidation) {
+        result.validation = this.validateProjectJSON(jsonData);
+        result.warnings = [...result.validation.warnings];
+
+        if (!result.validation.isValid) {
+          result.errors = [...result.validation.errors];
+          
+          // Try to auto-fix common issues if enabled
+          if (autoFix) {
+            const fixResult = this.attemptAutoFix(jsonData, result.validation.errors);
+            if (fixResult.success) {
+              result.fixes = fixResult.fixes;
+              result.warnings.push('Se aplicaron correcciones automáticas al proyecto');
+              jsonData = fixResult.fixedData;
+              
+              // Re-validate after fixes
+              result.validation = this.validateProjectJSON(jsonData);
+              if (result.validation.isValid) {
+                result.errors = [];
+              }
+            }
+          }
+          
+          if (result.errors.length > 0) {
+            return result;
+          }
+        }
       }
 
       // If validation only, return here
       if (validateOnly) {
         result.success = true;
+        result.importTime = Date.now() - startTime;
         return result;
       }
 
-      // Import the project
-      result.project = this.importProject(jsonData, newStartDate);
-      result.success = true;
+      // Enhanced import with error recovery
+      try {
+        result.project = this.importProject(jsonData, newStartDate);
+        result.success = true;
+        
+        // Validate imported project structure
+        if (result.project) {
+          const postImportValidation = this.validateImportedProject(result.project);
+          if (postImportValidation.warnings.length > 0) {
+            result.warnings.push(...postImportValidation.warnings);
+          }
+        }
+        
+      } catch (importError) {
+        // Try recovery strategies
+        const recoveryResult = this.attemptImportRecovery(jsonData, importError, options);
+        
+        if (recoveryResult.success) {
+          result.project = recoveryResult.project;
+          result.success = true;
+          result.warnings.push('Se aplicó recuperación automática durante la importación');
+          result.fixes.push(...recoveryResult.fixes);
+        } else {
+          throw importError;
+        }
+      }
 
     } catch (error) {
-      result.errors.push(error.message);
+      result.errors.push(this.getEnhancedErrorMessage(error));
+      
+      // Add recovery suggestions
+      const suggestions = this.getRecoverySuggestions(error);
+      if (suggestions.length > 0) {
+        result.suggestions = suggestions;
+      }
+    }
+
+    result.importTime = Date.now() - startTime;
+    return result;
+  }
+
+  /**
+   * Attempt to auto-fix common JSON issues
+   * @param {string} jsonData - Original JSON data
+   * @param {Array} errors - Validation errors
+   * @returns {Object} Fix result
+   */
+  static attemptAutoFix(jsonData, errors) {
+    const result = {
+      success: false,
+      fixedData: jsonData,
+      fixes: []
+    };
+
+    try {
+      let data = JSON.parse(jsonData);
+      let hasChanges = false;
+
+      // Fix missing required fields
+      if (!data.id) {
+        data.id = 'imported_project_' + Date.now();
+        result.fixes.push('Se generó un ID único para el proyecto');
+        hasChanges = true;
+      }
+
+      if (!data.name || data.name.trim() === '') {
+        data.name = 'Proyecto Importado';
+        result.fixes.push('Se asignó un nombre por defecto al proyecto');
+        hasChanges = true;
+      }
+
+      if (!data.status) {
+        data.status = 'active';
+        result.fixes.push('Se asignó estado "activo" por defecto');
+        hasChanges = true;
+      }
+
+      // Fix task issues
+      if (data.tasks && Array.isArray(data.tasks)) {
+        data.tasks = data.tasks.map((task, index) => {
+          let taskFixed = { ...task };
+          
+          if (!taskFixed.id) {
+            taskFixed.id = `task_${Date.now()}_${index}`;
+            result.fixes.push(`Se generó ID para la tarea en posición ${index + 1}`);
+            hasChanges = true;
+          }
+          
+          if (!taskFixed.title || taskFixed.title.trim() === '') {
+            taskFixed.title = `Tarea ${index + 1}`;
+            result.fixes.push(`Se asignó título por defecto a la tarea en posición ${index + 1}`);
+            hasChanges = true;
+          }
+          
+          if (!taskFixed.status) {
+            taskFixed.status = 'pending';
+            result.fixes.push(`Se asignó estado "pendiente" a la tarea "${taskFixed.title}"`);
+            hasChanges = true;
+          }
+          
+          return taskFixed;
+        });
+      }
+
+      // Fix team member issues
+      if (data.teamMembers && Array.isArray(data.teamMembers)) {
+        data.teamMembers = data.teamMembers.map((member, index) => {
+          let memberFixed = { ...member };
+          
+          if (!memberFixed.id) {
+            memberFixed.id = `member_${Date.now()}_${index}`;
+            result.fixes.push(`Se generó ID para el miembro del equipo en posición ${index + 1}`);
+            hasChanges = true;
+          }
+          
+          if (!memberFixed.name || memberFixed.name.trim() === '') {
+            memberFixed.name = `Miembro ${index + 1}`;
+            result.fixes.push(`Se asignó nombre por defecto al miembro en posición ${index + 1}`);
+            hasChanges = true;
+          }
+          
+          return memberFixed;
+        });
+      }
+
+      if (hasChanges) {
+        result.fixedData = JSON.stringify(data);
+        result.success = true;
+      }
+
+    } catch (error) {
+      console.error('Error during auto-fix:', error);
     }
 
     return result;
+  }
+
+  /**
+   * Attempt import recovery strategies
+   * @param {string} jsonData - JSON data
+   * @param {Error} error - Import error
+   * @param {Object} options - Import options
+   * @returns {Object} Recovery result
+   */
+  static attemptImportRecovery(jsonData, error, options) {
+    const result = {
+      success: false,
+      project: null,
+      fixes: []
+    };
+
+    try {
+      const data = JSON.parse(jsonData);
+      
+      // Strategy 1: Import with minimal data
+      if (error.message.includes('date') || error.message.includes('invalid')) {
+        try {
+          // Remove problematic date fields and let the system generate new ones
+          const cleanData = this.cleanDateFields(data);
+          result.project = this.createProjectFromData(cleanData);
+          result.fixes.push('Se removieron fechas inválidas y se generaron nuevas');
+          result.success = true;
+          return result;
+        } catch (cleanError) {
+          console.error('Clean date strategy failed:', cleanError);
+        }
+      }
+
+      // Strategy 2: Import without team members
+      if (error.message.includes('team') || error.message.includes('member')) {
+        try {
+          const dataWithoutTeam = { ...data, teamMembers: [] };
+          result.project = this.createProjectFromData(dataWithoutTeam);
+          result.fixes.push('Se importó el proyecto sin los miembros del equipo debido a errores');
+          result.success = true;
+          return result;
+        } catch (teamError) {
+          console.error('No team strategy failed:', teamError);
+        }
+      }
+
+      // Strategy 3: Import with basic structure only
+      try {
+        const basicData = {
+          id: data.id || 'recovered_project_' + Date.now(),
+          name: data.name || 'Proyecto Recuperado',
+          description: data.description || '',
+          status: 'active',
+          tasks: [],
+          teamMembers: []
+        };
+        
+        result.project = this.createProjectFromData(basicData);
+        result.fixes.push('Se importó solo la estructura básica del proyecto');
+        result.success = true;
+      } catch (basicError) {
+        console.error('Basic recovery strategy failed:', basicError);
+      }
+
+    } catch (parseError) {
+      console.error('Recovery failed - cannot parse JSON:', parseError);
+    }
+
+    return result;
+  }
+
+  /**
+   * Clean problematic date fields from project data
+   * @param {Object} data - Project data
+   * @returns {Object} Cleaned data
+   */
+  static cleanDateFields(data) {
+    const cleaned = { ...data };
+    
+    // Remove invalid project dates
+    if (cleaned.startDate) {
+      const startDate = new Date(cleaned.startDate);
+      if (isNaN(startDate.getTime())) {
+        delete cleaned.startDate;
+      }
+    }
+    
+    if (cleaned.endDate) {
+      const endDate = new Date(cleaned.endDate);
+      if (isNaN(endDate.getTime())) {
+        delete cleaned.endDate;
+      }
+    }
+    
+    // Clean task dates
+    if (cleaned.tasks && Array.isArray(cleaned.tasks)) {
+      cleaned.tasks = cleaned.tasks.map(task => {
+        const cleanTask = { ...task };
+        
+        if (cleanTask.startDate) {
+          const startDate = new Date(cleanTask.startDate);
+          if (isNaN(startDate.getTime())) {
+            delete cleanTask.startDate;
+          }
+        }
+        
+        if (cleanTask.endDate) {
+          const endDate = new Date(cleanTask.endDate);
+          if (isNaN(endDate.getTime())) {
+            delete cleanTask.endDate;
+          }
+        }
+        
+        return cleanTask;
+      });
+    }
+    
+    return cleaned;
+  }
+
+  /**
+   * Validate imported project after creation
+   * @param {Object} project - Imported project
+   * @returns {Object} Validation result
+   */
+  static validateImportedProject(project) {
+    const result = {
+      isValid: true,
+      warnings: []
+    };
+
+    if (!project.tasks || project.tasks.length === 0) {
+      result.warnings.push('El proyecto no tiene tareas');
+    }
+
+    if (!project.teamMembers || project.teamMembers.length === 0) {
+      result.warnings.push('El proyecto no tiene miembros del equipo');
+    }
+
+    if (!project.startDate) {
+      result.warnings.push('El proyecto no tiene fecha de inicio definida');
+    }
+
+    return result;
+  }
+
+  /**
+   * Get enhanced error message with context
+   * @param {Error} error - Original error
+   * @returns {string} Enhanced error message
+   */
+  static getEnhancedErrorMessage(error) {
+    const message = error.message || 'Error desconocido';
+    
+    if (message.includes('JSON')) {
+      return 'El archivo no tiene un formato JSON válido. Verifica que el archivo no esté corrupto.';
+    }
+    
+    if (message.includes('date')) {
+      return 'Error en las fechas del proyecto. Algunas fechas pueden tener formato inválido.';
+    }
+    
+    if (message.includes('validation')) {
+      return 'Los datos del proyecto no cumplen con los requisitos de validación.';
+    }
+    
+    return `Error durante la importación: ${message}`;
+  }
+
+  /**
+   * Get recovery suggestions for specific errors
+   * @param {Error} error - Import error
+   * @returns {Array} Array of suggestion strings
+   */
+  static getRecoverySuggestions(error) {
+    const suggestions = [];
+    const message = error.message?.toLowerCase() || '';
+    
+    if (message.includes('json')) {
+      suggestions.push('Verifica que el archivo sea un JSON válido');
+      suggestions.push('Intenta abrir el archivo en un editor de texto para verificar su contenido');
+      suggestions.push('Asegúrate de que el archivo no esté truncado o corrupto');
+    }
+    
+    if (message.includes('date')) {
+      suggestions.push('Verifica que las fechas estén en formato ISO (YYYY-MM-DD)');
+      suggestions.push('Intenta importar sin especificar nueva fecha de inicio');
+      suggestions.push('Revisa que las fechas de las tareas sean coherentes');
+    }
+    
+    if (message.includes('validation')) {
+      suggestions.push('Revisa que todos los campos requeridos estén presentes');
+      suggestions.push('Verifica que los IDs sean únicos');
+      suggestions.push('Asegúrate de que los valores estén en los rangos permitidos');
+    }
+    
+    // General suggestions
+    suggestions.push('Intenta exportar un proyecto existente para ver el formato correcto');
+    suggestions.push('Contacta al soporte si el problema persiste');
+    
+    return suggestions;
   }
 
   /**

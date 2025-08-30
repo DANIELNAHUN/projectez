@@ -32,6 +32,20 @@
 
     <!-- Right side actions -->
     <div class="flex items-center space-x-2 sm:space-x-3">
+      <!-- Project actions (only show on project pages) -->
+      <div v-if="showProjectActions" class="flex items-center space-x-2">
+        <button @click="handleImportProject"
+          class="p-2 rounded-lg text-earth-brown dark:text-earth-light-yellow hover:bg-white dark:hover:bg-earth-brown focus:outline-none focus:ring-2 focus:ring-earth-golden transition-all duration-300 hover:scale-105"
+          title="Importar Proyecto (Ctrl+Shift+I)">
+          <i class="pi pi-upload text-lg"></i>
+        </button>
+        <button @click="handleExportProject"
+          class="p-2 rounded-lg text-earth-brown dark:text-earth-light-yellow hover:bg-white dark:hover:bg-earth-brown focus:outline-none focus:ring-2 focus:ring-earth-golden transition-all duration-300 hover:scale-105"
+          title="Exportar Proyecto (Ctrl+Shift+E)">
+          <i class="pi pi-download text-lg"></i>
+        </button>
+      </div>
+
       <!-- Search (hidden on mobile) -->
       <button
         class="hidden sm:flex p-2 rounded-lg text-earth-brown dark:text-earth-light-yellow hover:bg-white dark:hover:bg-earth-brown focus:outline-none focus:ring-2 focus:ring-earth-golden transition-all duration-300 hover:scale-105"
@@ -68,7 +82,7 @@
 
         <!-- Settings dropdown menu -->
         <div v-if="settingsMenuOpen" v-click-outside="closeSettingsMenu"
-          class="absolute right-0 mt-2 w-48 bg-white dark:bg-earth-dark-olive rounded-lg shadow-lg dark:shadow-earth-brown/30 border border-earth-light-gray dark:border-earth-brown py-1 z-50 backdrop-blur-sm">
+          class="absolute right-0 mt-2 w-56 bg-white dark:bg-earth-dark-olive rounded-lg shadow-lg dark:shadow-earth-brown/30 border border-earth-light-gray dark:border-earth-brown py-1 z-50 backdrop-blur-sm">
           <a href="#"
             class="flex items-center px-4 py-2 text-sm text-earth-brown dark:text-earth-light-yellow hover:bg-earth-light-gray dark:hover:bg-earth-brown transition-all duration-200 hover:translate-x-1">
             <i class="pi pi-user mr-3"></i>
@@ -80,11 +94,17 @@
             Configuración
           </a>
           <hr class="my-1 border-earth-light-gray dark:border-earth-brown">
-          <a href="#"
-            class="flex items-center px-4 py-2 text-sm text-earth-brown dark:text-earth-light-yellow hover:bg-earth-light-gray dark:hover:bg-earth-brown transition-all duration-200 hover:translate-x-1">
+          <button @click="handleShowHelp"
+            class="w-full flex items-center px-4 py-2 text-sm text-earth-brown dark:text-earth-light-yellow hover:bg-earth-light-gray dark:hover:bg-earth-brown transition-all duration-200 hover:translate-x-1">
             <i class="pi pi-question-circle mr-3"></i>
             Ayuda
-          </a>
+            <span class="ml-auto text-xs text-gray-500">Ctrl+Shift+H</span>
+          </button>
+          <button @click="handleShowKeyboardShortcuts"
+            class="w-full flex items-center px-4 py-2 text-sm text-earth-brown dark:text-earth-light-yellow hover:bg-earth-light-gray dark:hover:bg-earth-brown transition-all duration-200 hover:translate-x-1">
+            <i class="pi pi-keyboard mr-3"></i>
+            Atajos de Teclado
+          </button>
         </div>
       </div>
     </div>
@@ -119,12 +139,35 @@ const breadcrumbs = computed(() => {
   return crumbs
 })
 
+const showProjectActions = computed(() => {
+  // Show project actions on projects page and project detail pages
+  return route.path === '/projects' || route.path.startsWith('/projects/')
+})
+
 const toggleSettingsMenu = () => {
   settingsMenuOpen.value = !settingsMenuOpen.value
 }
 
 const closeSettingsMenu = () => {
   settingsMenuOpen.value = false
+}
+
+const handleImportProject = () => {
+  window.dispatchEvent(new CustomEvent('import-project'))
+}
+
+const handleExportProject = () => {
+  window.dispatchEvent(new CustomEvent('export-project'))
+}
+
+const handleShowHelp = () => {
+  window.dispatchEvent(new CustomEvent('show-help'))
+  closeSettingsMenu()
+}
+
+const handleShowKeyboardShortcuts = () => {
+  window.dispatchEvent(new CustomEvent('show-keyboard-shortcuts'))
+  closeSettingsMenu()
 }
 
 // Click outside directive implementation

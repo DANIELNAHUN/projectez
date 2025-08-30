@@ -115,6 +115,12 @@
       @project-imported="handleAIProjectImported"
     />
 
+    <!-- Project Import/Export Component -->
+    <ProjectImportExport
+      @project-imported="handleProjectImported"
+      @project-exported="handleProjectExported"
+    />
+
     <!-- User Management Demo (temporary for testing) -->
     <UserManagementDemo />
 
@@ -137,6 +143,7 @@ import ResponsiveModal from '../components/ui/ResponsiveModal.vue'
 import LoadingSpinner from '../components/ui/LoadingSpinner.vue'
 import UserManagementDemo from '../components/project/UserManagementDemo.vue'
 import AIProjectGenerator from '../components/ui/AIProjectGenerator.vue'
+import ProjectImportExport from '../components/ui/ProjectImportExport.vue'
 import { useToast } from '../composables/useToast.js'
 import { useTheme } from '../composables/useTheme'
 
@@ -148,7 +155,8 @@ export default {
     ResponsiveModal,
     LoadingSpinner,
     UserManagementDemo,
-    AIProjectGenerator
+    AIProjectGenerator,
+    ProjectImportExport
   },
   setup() {
     const toast = useToast()
@@ -245,11 +253,60 @@ export default {
       )
       // Reload projects to show the new one
       this.loadProjects()
+    },
+
+    handleProjectImported(project) {
+      this.toast.success(
+        'Proyecto importado',
+        `El proyecto "${project.name}" ha sido importado exitosamente.`
+      )
+      // Reload projects to show the new one
+      this.loadProjects()
+    },
+
+    handleProjectExported(projectName) {
+      this.toast.success(
+        'Proyecto exportado',
+        `El proyecto "${projectName}" ha sido exportado exitosamente.`
+      )
+    },
+
+    // Keyboard shortcut handlers
+    handleOpenAIChatbot() {
+      this.showAIGenerator = true
+    },
+    
+    handleCreateNewProject() {
+      this.showCreateForm = true
+    },
+    
+    handleImportProject() {
+      // Trigger import functionality - will be handled by ProjectImportExport component
+      window.dispatchEvent(new CustomEvent('trigger-import'))
+    },
+    
+    handleExportProject() {
+      // Trigger export functionality - will be handled by ProjectImportExport component
+      window.dispatchEvent(new CustomEvent('trigger-export'))
     }
   },
   
   async mounted() {
     await this.loadProjects()
+    
+    // Listen for keyboard shortcut events
+    window.addEventListener('open-ai-chatbot', this.handleOpenAIChatbot)
+    window.addEventListener('create-new-project', this.handleCreateNewProject)
+    window.addEventListener('import-project', this.handleImportProject)
+    window.addEventListener('export-project', this.handleExportProject)
+  },
+  
+  beforeUnmount() {
+    // Clean up event listeners
+    window.removeEventListener('open-ai-chatbot', this.handleOpenAIChatbot)
+    window.removeEventListener('create-new-project', this.handleCreateNewProject)
+    window.removeEventListener('import-project', this.handleImportProject)
+    window.removeEventListener('export-project', this.handleExportProject)
   }
 }
 </script>

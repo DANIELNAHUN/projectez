@@ -683,31 +683,63 @@ const importProject = async () => {
       )
     }
     
-    // Import the project
+    // Import the project with enhanced error handling
     const importResult = ProjectImportService.importProjectSafe(jsonData, options)
     
     if (importResult.success) {
       // Add to store
       await store.dispatch('projects/importProject', jsonData)
       
+      let successMessage = 'Proyecto importado exitosamente'
+      let details = `El proyecto "${importResult.project?.name || 'Sin nombre'}" se ha importado correctamente`
+      
+      // Add information about fixes and warnings
+      if (importResult.fixes && importResult.fixes.length > 0) {
+        details += `\n\nCorrecciones aplicadas:\n• ${importResult.fixes.join('\n• ')}`
+      }
+      
+      if (importResult.warnings && importResult.warnings.length > 0) {
+        details += `\n\nAdvertencias:\n• ${importResult.warnings.join('\n• ')}`
+      }
+      
+      if (importResult.importTime > 0) {
+        details += `\n\nTiempo de importación: ${Math.round(importResult.importTime)}ms`
+      }
+      
       operationResult.value = {
         success: true,
-        message: 'Proyecto importado exitosamente',
-        details: `El proyecto "${importResult.project?.name || 'Sin nombre'}" se ha importado correctamente`
+        message: successMessage,
+        details: details
       }
       
       emit('project-imported', {
         project: importResult.project,
-        warnings: importResult.warnings
+        warnings: importResult.warnings,
+        fixes: importResult.fixes,
+        importTime: importResult.importTime
       })
       
       // Clear form after successful import
       setTimeout(() => {
         resetState()
-      }, 2000)
+      }, 3000) // Longer delay to show detailed results
       
     } else {
-      throw new Error(importResult.errors.join(', '))
+      // Enhanced error reporting
+      let errorMessage = 'Error al importar el proyecto'
+      let errorDetails = importResult.errors.join('\n• ')
+      
+      // Add suggestions if available
+      if (importResult.suggestions && importResult.suggestions.length > 0) {
+        errorDetails += '\n\nSugerencias:\n• ' + importResult.suggestions.join('\n• ')
+      }
+      
+      // Add validation details if available
+      if (importResult.validation && importResult.validation.warnings.length > 0) {
+        errorDetails += '\n\nAdvertencias de validación:\n• ' + importResult.validation.warnings.join('\n• ')
+      }
+      
+      throw new Error(errorDetails)
     }
     
   } catch (error) {

@@ -468,7 +468,7 @@ Guidelines:
   }
 
   /**
-   * Generate project with error handling and retries
+   * Generate project with enhanced error handling and retries
    * @param {string} prompt - User prompt
    * @param {Object} options - Generation options
    * @returns {Promise<Object>} Generation result with success status
@@ -479,35 +479,124 @@ Guidelines:
       project: null,
       errors: [],
       warnings: [],
-      retryCount: 0
+      retryCount: 0,
+      totalTime: 0,
+      retryHistory: []
     };
 
-    const maxRetries = options.maxRetries || 2;
+    const maxRetries = options.maxRetries || 3;
+    const baseDelay = options.baseDelay || 1000;
+    const startTime = Date.now();
     
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      const attemptStartTime = Date.now();
+      
       try {
         result.project = await this.generateProject(prompt, options);
         result.success = true;
         result.retryCount = attempt;
+        result.totalTime = Date.now() - startTime;
+        
+        // Log successful generation
+        if (attempt > 0) {
+          console.log(`OpenAI project generation succeeded after ${attempt} retries`, {
+            totalTime: result.totalTime,
+            retryHistory: result.retryHistory
+          });
+        }
+        
         break;
       } catch (error) {
-        result.errors.push(`Attempt ${attempt + 1}: ${error.message}`);
+        const attemptTime = Date.now() - attemptStartTime;
+        const errorInfo = {
+          attempt: attempt + 1,
+          error: error.message,
+          errorCode: error.code,
+          time: attemptTime,
+          timestamp: new Date().toISOString()
+        };
         
-        // Don't retry on configuration or quota errors
-        if (error.message.includes('not configured') || 
-            error.message.includes('quota exceeded') || 
-            error.message.includes('invalid_api_key')) {
+        result.errors.push(`Intento ${attempt + 1}: ${error.message}`);
+        result.retryHistory.push(errorInfo);
+        
+        // Determine if we should retry based on error type
+        const shouldRetry = this.shouldRetryError(error);
+        
+        if (!shouldRetry || attempt >= maxRetries) {
+          result.totalTime = Date.now() - startTime;
+          
+          // Add specific error guidance
+          if (error.code === 'insufficient_quota') {
+            result.errors.push('Sugerencia: Verifica tu configuración de facturación en OpenAI');
+          } else if (error.code === 'invalid_api_key') {
+            result.errors.push('Sugerencia: Verifica que tu clave API sea válida y tenga permisos');
+          } else if (error.code === 'rate_limit_exceeded') {
+            result.errors.push('Sugerencia: Espera unos minutos antes de intentar nuevamente');
+          }
+          
           break;
         }
         
-        // Wait before retry (exponential backoff)
+        // Calculate delay with exponential backoff and jitter
+        const delay = Math.min(
+          baseDelay * Math.pow(2, attempt) * (0.5 + Math.random() * 0.5),
+          10000 // Max 10 seconds
+        );
+        
+        console.log(`OpenAI generation failed, retrying in ${delay}ms`, errorInfo);
+        
+        // Wait before retry
         if (attempt < maxRetries) {
-          await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+          await new Promise(resolve => setTimeout(resolve, delay));
         }
       }
     }
 
     return result;
+  }
+
+  /**
+   * Determine if an error should be retried
+   * @param {Error} error - The error to check
+   * @returns {boolean} Whether the error should be retried
+   */
+  shouldRetryError(error) {
+    // Don't retry on permanent failures
+    const permanentErrors = [
+      'insufficient_quota',
+      'invalid_api_key',
+      'model_not_found',
+      'invalid_request_error'
+    ];
+    
+    if (permanentErrors.includes(error.code)) {
+      return false;
+    }
+    
+    // Don't retry on validation errors
+    if (error.message?.includes('validation') || error.message?.includes('invalid')) {
+      return false;
+    }
+    
+    // Retry on temporary failures
+    const retryableErrors = [
+      'rate_limit_exceeded',
+      'server_error',
+      'timeout',
+      'network_error',
+      'service_unavailable'
+    ];
+    
+    if (retryableErrors.includes(error.code)) {
+      return true;
+    }
+    
+    // Retry on network-related errors
+    const message = error.message?.toLowerCase() || '';
+    return message.includes('network') || 
+           message.includes('timeout') || 
+           message.includes('fetch') ||
+           message.includes('connection');
   }
 
   /**

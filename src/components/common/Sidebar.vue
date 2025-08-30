@@ -32,6 +32,7 @@
 
     <!-- Navigation -->
     <nav class="mt-8 px-4 flex-1 overflow-y-auto">
+      <!-- Main navigation items -->
       <ul class="space-y-2">
         <li v-for="item in navigationItems" :key="item.name" class="relative group">
           <router-link :to="item.path" :class="[
@@ -52,6 +53,33 @@
           </router-link>
         </li>
       </ul>
+
+      <!-- Action items section -->
+      <div class="mt-8">
+        <div v-show="!isCollapsed" class="mb-3">
+          <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+            Herramientas
+          </h3>
+        </div>
+        <ul class="space-y-2">
+          <li v-for="item in actionItems" :key="item.name" class="relative group">
+            <button @click="handleActionClick(item.action)" :class="[
+              'w-full flex items-center text-sm font-medium rounded-lg transition-all duration-200 relative',
+              isCollapsed ? 'px-3 py-3 justify-center' : 'px-4 py-3',
+              'text-gray-300 hover:bg-gray-700 dark:hover:bg-gray-800 hover:text-white hover:translate-x-1'
+            ]">
+              <i :class="[item.icon, 'text-lg flex-shrink-0', item.color, isCollapsed ? '' : 'mr-3']"></i>
+              <span v-show="!isCollapsed" class="truncate">{{ item.label }}</span>
+
+              <!-- Tooltip for collapsed state -->
+              <div v-if="isCollapsed"
+                class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50 pointer-events-none">
+                {{ item.label }}
+              </div>
+            </button>
+          </li>
+        </ul>
+      </div>
 
       <!-- Projects section -->
       <div v-show="!isCollapsed" class="mt-8">
@@ -140,6 +168,23 @@ const navigationItems = [
   }
 ]
 
+const actionItems = [
+  {
+    name: 'ai-chatbot',
+    label: 'Chatbot IA',
+    icon: 'pi pi-sparkles',
+    action: 'open-ai-chatbot',
+    color: 'text-purple-400 hover:text-purple-300'
+  },
+  {
+    name: 'help',
+    label: 'Ayuda',
+    icon: 'pi pi-question-circle',
+    action: 'show-help',
+    color: 'text-blue-400 hover:text-blue-300'
+  }
+]
+
 // Mock recent projects - will be replaced with store data in later tasks
 const recentProjects = ref([
   { id: '1', name: 'Proyecto Demo 1' },
@@ -153,6 +198,15 @@ const toggleProjectsSection = () => {
 const toggleCollapse = () => {
   isCollapsed.value = !isCollapsed.value
   emit('collapse-change', isCollapsed.value)
+}
+
+const handleActionClick = (action) => {
+  // Emit custom event for the action
+  window.dispatchEvent(new CustomEvent(action))
+  // Close sidebar on mobile after action
+  if (isMobile.value) {
+    emit('close')
+  }
 }
 
 const checkMobile = () => {
