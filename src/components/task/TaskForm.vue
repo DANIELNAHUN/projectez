@@ -30,38 +30,23 @@
         />
       </div>
 
-      <!-- Date Range -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div class="form-group">
-          <label for="startDate" class="block text-sm font-medium text-gray-700 mb-2">
-            Fecha de inicio *
-          </label>
-          <DatePicker
-            id="startDate"
-            v-model="formData.startDate"
-            :class="{ 'p-invalid': errors.startDate }"
-            dateFormat="dd/mm/yy"
-            :showIcon="true"
-            class="w-full"
-          />
-          <small v-if="errors.startDate" class="p-error">{{ errors.startDate }}</small>
-        </div>
-
-        <div class="form-group">
-          <label for="endDate" class="block text-sm font-medium text-gray-700 mb-2">
-            Fecha de fin *
-          </label>
-          <DatePicker
-            id="endDate"
-            v-model="formData.endDate"
-            :class="{ 'p-invalid': errors.endDate }"
-            dateFormat="dd/mm/yy"
-            :showIcon="true"
-            :minDate="formData.startDate"
-            class="w-full"
-          />
-          <small v-if="errors.endDate" class="p-error">{{ errors.endDate }}</small>
-        </div>
+      <!-- Enhanced Date Management -->
+      <div class="form-group">
+        <h3 class="text-lg font-medium text-gray-900 mb-4">Fechas y Duración</h3>
+        <EnhancedDatePicker
+          v-model:startDate="formData.startDate"
+          v-model:endDate="formData.endDate"
+          v-model:duration="formData.duration"
+          v-model:adjustStartDate="formData.adjustStartDate"
+          :startDateId="'task-start-date'"
+          :endDateId="'task-end-date'"
+          :durationId="'task-duration'"
+          :adjustStartDateId="'task-adjust-start-date'"
+          :startDateLabel="'Fecha de inicio *'"
+          :endDateLabel="'Fecha de fin *'"
+          :required="true"
+          @validation-change="onDateValidationChange"
+        />
       </div>
 
       <!-- Status and Priority -->
@@ -263,6 +248,7 @@ import Select from 'primevue/select'
 import RadioButton from 'primevue/radiobutton'
 import Button from 'primevue/button'
 import Slider from 'primevue/slider'
+import EnhancedDatePicker from '../ui/EnhancedDatePicker.vue'
 import { Task, Deliverable } from '../../models/index.js'
 import { 
   TASK_STATUSES, 
@@ -270,6 +256,7 @@ import {
   DELIVERABLE_TYPES, 
   DELIVERABLE_STATUSES 
 } from '../../models/index.js'
+import { DateCalculationService } from '../../services/dateCalculationService.js'
 
 export default {
   name: 'TaskForm',
@@ -280,7 +267,8 @@ export default {
     Select,
     RadioButton,
     Button,
-    Slider
+    Slider,
+    EnhancedDatePicker
   },
   props: {
     task: {
@@ -318,6 +306,11 @@ export default {
           description: props.task.description,
           startDate: new Date(props.task.startDate),
           endDate: new Date(props.task.endDate),
+          duration: props.task.duration || DateCalculationService.calculateWorkingDays(
+            new Date(props.task.startDate), 
+            new Date(props.task.endDate)
+          ),
+          adjustStartDate: props.task.adjustStartDate || false,
           status: props.task.status,
           type: props.task.type,
           priority: props.task.priority,
@@ -348,6 +341,8 @@ export default {
           description: '',
           startDate: now,
           endDate: tomorrow,
+          duration: 1, // Default to 1 working day
+          adjustStartDate: false,
           status: 'pending',
           type: 'simple',
           priority: 'medium',
@@ -441,6 +436,16 @@ export default {
       return labels[status] || status
     }
 
+    // Date validation state
+    const dateValidationErrors = ref({})
+    const isDateValidationValid = ref(true)
+
+    // Date validation handler
+    const onDateValidationChange = (validationResult) => {
+      dateValidationErrors.value = validationResult.errors || {}
+      isDateValidationValid.value = validationResult.isValid
+    }
+
     // Validation
     const validateForm = () => {
       errors.value = {}
@@ -449,18 +454,25 @@ export default {
         errors.value.title = 'El título es requerido'
       }
 
-      if (!formData.value.startDate) {
-        errors.value.startDate = 'La fecha de inicio es requerida'
+      // Include date validation errors from EnhancedDatePicker
+      if (!isDateValidationValid.value) {
+        Object.assign(errors.value, dateValidationErrors.value)
       }
 
-      if (!formData.value.endDate) {
-        errors.value.endDate = 'La fecha de fin es requerida'
-      }
-
+      // Additional date validation using DateCalculationService
       if (formData.value.startDate && formData.value.endDate) {
-        if (formData.value.endDate < formData.value.startDate) {
-          errors.value.endDate = 'La fecha de fin debe ser posterior a la fecha de inicio'
+        try {
+          if (!DateCalculationService.validateDateRange(formData.value.startDate, formData.value.endDate)) {
+            errors.value.endDate = 'La fecha de fin debe ser posterior a la fecha de inicio'
+          }
+        } catch (error) {
+          errors.value.dateRange = 'Error en el rango de fechas: ' + error.message
         }
+      }
+
+      // Validate duration
+      if (formData.value.duration !== null && formData.value.duration < 1) {
+        errors.value.duration = 'La duración debe ser al menos 1 día'
       }
 
       if (formData.value.type === 'with_deliverable') {
@@ -484,6 +496,20 @@ export default {
       }
     })
 
+    // Watch for duration changes to ensure consistency
+    watch(() => formData.value.duration, (newDuration) => {
+      if (newDuration && newDuration > 0) {
+        // The EnhancedDatePicker handles the date calculations
+        // We just need to ensure the form data is consistent
+        if (formData.value.type === 'with_deliverable' && formData.value.endDate) {
+          // Update deliverable due date if it's outside the new date range
+          if (formData.value.deliverable.dueDate > formData.value.endDate) {
+            formData.value.deliverable.dueDate = formData.value.endDate
+          }
+        }
+      }
+    })
+
     // Form submission
     const handleSubmit = async () => {
       if (!validateForm()) {
@@ -495,7 +521,10 @@ export default {
       try {
         const taskData = {
           ...formData.value,
-          projectId: props.projectId
+          projectId: props.projectId,
+          // Ensure duration and adjustStartDate are included
+          duration: formData.value.duration,
+          adjustStartDate: formData.value.adjustStartDate
         }
 
         // Only include parentTaskId if it's actually set
@@ -538,6 +567,9 @@ export default {
       deliverableTypeOptions,
       deliverableStatusOptions,
       teamMemberOptions,
+      dateValidationErrors,
+      isDateValidationValid,
+      onDateValidationChange,
       handleSubmit,
       handleCancel
     }

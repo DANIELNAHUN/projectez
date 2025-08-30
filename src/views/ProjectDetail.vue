@@ -59,14 +59,34 @@
     <div v-else class="space-y-6">
       <!-- Project overview -->
       <div class="bg-white rounded-lg shadow">
-        <div class="px-6 py-4 border-b border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
           <h3 class="text-lg font-semibold text-gray-900">Información del Proyecto</h3>
+          <div class="flex items-center space-x-2">
+            <button
+              @click="showDateAdjustmentDialog = true"
+              :disabled="!currentProject || isLoading"
+              class="inline-flex items-center px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Ajustar fechas del proyecto"
+            >
+              <i class="pi pi-calendar mr-1.5"></i>
+              Ajustar Fechas
+            </button>
+          </div>
         </div>
         <div class="p-6">
           <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Fecha de Inicio</label>
-              <p class="text-gray-900">{{ formatDate(currentProject.startDate) }}</p>
+              <div class="flex items-center">
+                <p class="text-gray-900">{{ formatDate(currentProject.startDate) }}</p>
+                <button
+                  @click="showDateAdjustmentDialog = true"
+                  class="ml-2 p-1 text-gray-400 hover:text-blue-600 rounded transition-colors duration-200"
+                  title="Ajustar fecha de inicio"
+                >
+                  <i class="pi pi-pencil text-xs"></i>
+                </button>
+              </div>
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Fecha de Fin</label>
@@ -80,6 +100,24 @@
           <div class="mt-6">
             <label class="block text-sm font-medium text-gray-700 mb-2">Descripción</label>
             <p class="text-gray-900">{{ currentProject.description || 'Sin descripción' }}</p>
+          </div>
+          
+          <!-- Project statistics -->
+          <div v-if="currentProject.tasks && currentProject.tasks.length > 0" class="mt-6 pt-6 border-t border-gray-200">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div class="text-center">
+                <p class="text-2xl font-bold text-blue-600">{{ currentProject.tasks.length }}</p>
+                <p class="text-sm text-gray-600">Tareas Totales</p>
+              </div>
+              <div class="text-center">
+                <p class="text-2xl font-bold text-green-600">{{ completedTasksCount }}</p>
+                <p class="text-sm text-gray-600">Completadas</p>
+              </div>
+              <div class="text-center">
+                <p class="text-2xl font-bold text-yellow-600">{{ pendingTasksCount }}</p>
+                <p class="text-sm text-gray-600">Pendientes</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -101,6 +139,24 @@
         </div>
       </div>
     </div>
+
+    <!-- Date Adjustment Dialog -->
+    <ProjectDateAdjustmentDialog
+      v-if="currentProject"
+      :visible="showDateAdjustmentDialog"
+      @update:visible="showDateAdjustmentDialog = $event"
+      :project="currentProject"
+      @confirmed="handleDateAdjustmentConfirmed"
+      @cancelled="handleDateAdjustmentCancelled"
+    />
+
+    <!-- Undo Toast -->
+    <ProjectDateAdjustmentUndo
+      :visible="showUndoToast"
+      :undo-data="undoData"
+      @undo="handleUndo"
+      @dismiss="showUndoToast = false"
+    />
   </div>
 </template>
 
@@ -108,16 +164,23 @@
 import { mapGetters, mapActions } from 'vuex'
 import TeamManager from '../components/project/TeamManager.vue'
 import TaskManager from '../components/task/TaskManager.vue'
+import ProjectDateAdjustmentDialog from '../components/project/ProjectDateAdjustmentDialog.vue'
+import ProjectDateAdjustmentUndo from '../components/project/ProjectDateAdjustmentUndo.vue'
 
 export default {
   name: 'ProjectDetail',
   components: {
     TeamManager,
-    TaskManager
+    TaskManager,
+    ProjectDateAdjustmentDialog,
+    ProjectDateAdjustmentUndo
   },
   data() {
     return {
-      projectId: this.$route.params.id
+      projectId: this.$route.params.id,
+      showDateAdjustmentDialog: false,
+      showUndoToast: false,
+      undoData: null
     }
   },
   computed: {
@@ -152,6 +215,14 @@ export default {
         paused: 'Pausado'
       }
       return texts[this.currentProject.status] || 'Desconocido'
+    },
+    completedTasksCount() {
+      if (!this.currentProject?.tasks) return 0
+      return this.currentProject.tasks.filter(task => task.status === 'completed').length
+    },
+    pendingTasksCount() {
+      if (!this.currentProject?.tasks) return 0
+      return this.currentProject.tasks.filter(task => task.status !== 'completed').length
     }
   },
   methods: {
@@ -165,6 +236,27 @@ export default {
         month: 'long',
         day: 'numeric'
       })
+    },
+
+    handleDateAdjustmentConfirmed(data) {
+      // Store undo data and show undo toast
+      this.undoData = data
+      this.showUndoToast = true
+      this.showDateAdjustmentDialog = false
+      
+      // Refresh current project to show updated dates
+      this.setCurrentProject(this.projectId)
+    },
+
+    handleDateAdjustmentCancelled() {
+      this.showDateAdjustmentDialog = false
+    },
+
+    handleUndo(undoData) {
+      // Refresh current project after undo
+      this.setCurrentProject(this.projectId)
+      this.showUndoToast = false
+      this.undoData = null
     }
   },
   

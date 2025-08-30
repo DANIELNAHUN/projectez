@@ -46,9 +46,20 @@
       <!-- Project dates -->
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
         <div class="form-group">
-          <label for="startDate" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Fecha de Inicio *
-          </label>
+          <div class="flex items-center justify-between mb-2">
+            <label for="startDate" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Fecha de Inicio *
+            </label>
+            <button
+              v-if="isEditing && project?.tasks && project.tasks.length > 0"
+              type="button"
+              @click="showDateAdjustmentDialog = true"
+              class="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium"
+              title="Ajustar fechas del proyecto y todas las tareas"
+            >
+              Ajustar fechas del proyecto
+            </button>
+          </div>
           <input id="startDate" :value="form.startDate" @input="handleFieldInput('startDate', $event.target.value)"
             @blur="handleFieldBlur('startDate')" type="date" required :class="[
               'w-full px-3 py-2 border rounded-lg transition-colors duration-200',
@@ -60,6 +71,9 @@
             ]" />
           <p v-if="hasFieldError('startDate')" class="mt-1 text-sm text-red-600 dark:text-red-400">
             {{ getFieldError('startDate') }}
+          </p>
+          <p v-if="isEditing && project?.tasks && project.tasks.length > 0" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Cambiar esta fecha solo afecta el proyecto. Use "Ajustar fechas del proyecto" para actualizar todas las tareas.
           </p>
         </div>
 
@@ -123,6 +137,24 @@
         </button>
       </div>
     </form>
+
+    <!-- Date Adjustment Dialog -->
+    <ProjectDateAdjustmentDialog
+      v-if="isEditing && project"
+      :visible="showDateAdjustmentDialog"
+      @update:visible="showDateAdjustmentDialog = $event"
+      :project="project"
+      @confirmed="handleDateAdjustmentConfirmed"
+      @cancelled="handleDateAdjustmentCancelled"
+    />
+
+    <!-- Undo Toast -->
+    <ProjectDateAdjustmentUndo
+      :visible="showUndoToast"
+      :undo-data="undoData"
+      @undo="handleUndo"
+      @dismiss="showUndoToast = false"
+    />
   </ResponsiveCard>
 </template>
 
@@ -131,6 +163,8 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useStore } from 'vuex'
 import ResponsiveCard from '../ui/ResponsiveCard.vue'
 import LoadingSpinner from '../ui/LoadingSpinner.vue'
+import ProjectDateAdjustmentDialog from './ProjectDateAdjustmentDialog.vue'
+import ProjectDateAdjustmentUndo from './ProjectDateAdjustmentUndo.vue'
 import { useFormValidation, validationRules } from '../../composables/useFormValidation.js'
 import { useErrorHandler } from '../../composables/useErrorHandler.js'
 import { useNotifications } from '../../services/notificationService.js'
@@ -139,7 +173,9 @@ export default {
   name: 'ProjectForm',
   components: {
     ResponsiveCard,
-    LoadingSpinner
+    LoadingSpinner,
+    ProjectDateAdjustmentDialog,
+    ProjectDateAdjustmentUndo
   },
   props: {
     project: {
@@ -147,7 +183,7 @@ export default {
       default: null
     }
   },
-  emits: ['submit', 'cancel'],
+  emits: ['submit', 'cancel', 'dateAdjusted', 'dateUndone'],
   setup(props, { emit }) {
     const store = useStore()
     const { handleError, handleValidationError } = useErrorHandler()
@@ -163,6 +199,9 @@ export default {
     })
 
     const isSubmitting = ref(false)
+    const showDateAdjustmentDialog = ref(false)
+    const showUndoToast = ref(false)
+    const undoData = ref(null)
 
     // Enhanced validation rules for projects
     const projectValidationRules = {
@@ -308,6 +347,33 @@ export default {
       emit('cancel')
     }
 
+    const handleDateAdjustmentConfirmed = (data) => {
+      // Store undo data and show undo toast
+      undoData.value = data
+      showUndoToast.value = true
+      showDateAdjustmentDialog.value = false
+      
+      // Update form with new start date
+      form.value.startDate = formatDateForInput(data.newStartDate)
+      
+      // Emit update to parent component
+      emit('dateAdjusted', data)
+    }
+
+    const handleDateAdjustmentCancelled = () => {
+      showDateAdjustmentDialog.value = false
+    }
+
+    const handleUndo = (undoData) => {
+      // Update form with original start date
+      form.value.startDate = formatDateForInput(undoData.originalStartDate)
+      showUndoToast.value = false
+      undoData.value = null
+      
+      // Emit undo to parent component
+      emit('dateUndone', undoData)
+    }
+
     // Initialize form
     onMounted(() => {
       initializeForm(props.project)
@@ -318,6 +384,9 @@ export default {
       form,
       isSubmitting,
       errors,
+      showDateAdjustmentDialog,
+      showUndoToast,
+      undoData,
 
       // Computed
       isEditing,
@@ -331,7 +400,10 @@ export default {
       handleFieldInput,
       getFieldError,
       hasFieldError,
-      resetForm
+      resetForm,
+      handleDateAdjustmentConfirmed,
+      handleDateAdjustmentCancelled,
+      handleUndo
     }
   }
 }
