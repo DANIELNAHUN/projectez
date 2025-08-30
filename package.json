@@ -10,7 +10,12 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "vitest run src/test/integration/ai-project-generator-e2e.test.js",
+    "test:performance": "vitest run src/test/integration/performance-tests.test.js",
+    "test:error-recovery": "vitest run src/test/integration/error-recovery-e2e.test.js",
+    "test:e2e-all": "node src/test/integration/run-e2e-tests.js",
+    "test:integration": "vitest run src/test/integration/"
   },
   "dependencies": {
     "@primevue/themes": "^4.3.7",
