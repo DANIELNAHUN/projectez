@@ -2,6 +2,7 @@ import { storageService } from '../../services/storageService.js'
 import { useErrorHandler } from '../../composables/useErrorHandler.js'
 import { useNotifications } from '../../services/notificationService.js'
 import { errorRecoveryService } from '../../services/errorRecoveryService.js'
+import { DateCalculationService } from '../../services/dateCalculationService.js'
 
 const state = {
   projects: [],
@@ -47,6 +48,20 @@ const mutations = {
     // Clear current project if it's the one being deleted
     if (state.currentProject && state.currentProject.id === projectId) {
       state.currentProject = null
+    }
+  },
+  
+  // New mutations for project date adjustments
+  ADJUST_PROJECT_DATES(state, { projectId, newStartDate }) {
+    const project = state.projects.find(p => p.id === projectId)
+    if (project) {
+      project.startDate = newStartDate
+      project.updatedAt = new Date()
+    }
+    // Update current project if it's the one being adjusted
+    if (state.currentProject && state.currentProject.id === projectId) {
+      state.currentProject.startDate = newStartDate
+      state.currentProject.updatedAt = new Date()
     }
   },
   
@@ -469,6 +484,164 @@ const actions = {
     }
   },
   
+  async importProject({ commit, state }, projectData) {
+    commit('SET_LOADING', true)
+    commit('SET_ERROR', null)
+    
+    try {
+      // Import ProjectImportService
+      const { ProjectImportService } = await import('../../services/ProjectImportService.js')
+      
+      let project
+      
+      if (typeof projectData === 'string') {
+        // If projectData is a JSON string, use the import service
+        const existingProjectIds = state.projects.map(p => p.id)
+        const preparedJson = ProjectImportService.prepareProjectForImport(
+          projectData, 
+          existingProjectIds
+        )
+        project = ProjectImportService.importProject(preparedJson)
+      } else {
+        // If projectData is already an object (from AI generation), create project directly
+        const { Project } = await import('../../models/index.js')
+        
+        // Ensure unique ID
+        let projectId = projectData.id
+        const existingIds = state.projects.map(p => p.id)
+        if (existingIds.includes(projectId)) {
+          projectId = ProjectImportService.generateUniqueProjectId(projectId, existingIds)
+        }
+        
+        // Helper function to process tasks recursively
+        const processTasks = async (tasksData, projectId, currentDate, parentTaskId = null) => {
+          const { Task } = await import('../../models/index.js')
+          const processedTasks = []
+          let workingDate = new Date(currentDate)
+          
+          for (const taskData of tasksData) {
+            try {
+              // Initialize dates if they don't exist
+              let startDate = taskData.startDate ? new Date(taskData.startDate) : new Date(workingDate)
+              let endDate = taskData.endDate ? new Date(taskData.endDate) : null
+              
+              // Validate start date
+              if (isNaN(startDate.getTime())) {
+                startDate = new Date(workingDate)
+              }
+              
+              // If no end date, calculate it based on duration
+              const duration = taskData.duration && taskData.duration > 0 ? taskData.duration : 1
+              if (!endDate) {
+                endDate = DateCalculationService.addWorkingDays(startDate, duration)
+              }
+              
+              // Validate end date
+              if (isNaN(endDate.getTime())) {
+                endDate = DateCalculationService.addWorkingDays(startDate, duration)
+              }
+              
+              // Process subtasks if they exist
+              let subtasks = []
+              if (taskData.subtasks && Array.isArray(taskData.subtasks) && taskData.subtasks.length > 0) {
+                const taskId = taskData.id || `task_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
+                subtasks = await processTasks(taskData.subtasks, projectId, startDate, taskId)
+              }
+              
+              const task = new Task({
+                ...taskData,
+                startDate,
+                endDate,
+                duration,
+                projectId: projectId,
+                parentTaskId: parentTaskId,
+                subtasks,
+                createdAt: new Date(),
+                updatedAt: new Date()
+              })
+              
+              processedTasks.push(task)
+              
+              // Move current date forward for next task (sequential scheduling)
+              workingDate = new Date(endDate)
+              workingDate.setDate(workingDate.getDate() + 1) // Add 1 day gap between tasks
+              
+            } catch (taskError) {
+              console.warn(`Error processing task "${taskData.title || 'Untitled'}":`, taskError.message)
+              // Continue with other tasks even if one fails
+            }
+          }
+          
+          return processedTasks
+        }
+        
+        // Convert tasks to Task instances and initialize dates if needed
+        let processedTasks = []
+        if (projectData.tasks && Array.isArray(projectData.tasks)) {
+          const projectStartDate = projectData.startDate ? new Date(projectData.startDate) : new Date()
+          processedTasks = await processTasks(projectData.tasks, projectId, projectStartDate)
+        }
+        
+        project = new Project({
+          ...projectData,
+          id: projectId,
+          tasks: processedTasks,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        })
+        
+        // Update project end date based on last task
+        if (processedTasks.length > 0) {
+          const lastTask = processedTasks[processedTasks.length - 1]
+          if (lastTask.endDate) {
+            project.endDate = new Date(lastTask.endDate)
+          }
+        }
+        
+        // If a start date was provided and it's different from current, adjust all dates
+        if (projectData.startDate) {
+          const newStartDate = new Date(projectData.startDate)
+          const currentStartDate = project.startDate
+          
+          // Only adjust if the dates are different
+          if (currentStartDate.getTime() !== newStartDate.getTime()) {
+            try {
+              project.adjustProjectDates(newStartDate)
+            } catch (adjustError) {
+              console.warn('Failed to adjust project dates, using original dates:', adjustError.message)
+              // Continue with import even if date adjustment fails
+              // The project will use the dates we calculated during task processing
+            }
+          }
+        }
+      }
+      
+      // Save to storage
+      await storageService.saveProject(project)
+      
+      // Update store
+      commit('ADD_PROJECT', project)
+      
+      const { operationSuccess } = useNotifications()
+      operationSuccess('import', 'Proyecto')
+      
+      return project
+    } catch (error) {
+      const { handleError, handleValidationError } = useErrorHandler()
+      
+      if (error.message.includes('validation') || error.message.includes('Invalid')) {
+        handleValidationError(error, 'Importing project')
+      } else {
+        handleError(error, 'Importing project')
+      }
+      
+      commit('SET_ERROR', error.message)
+      throw error
+    } finally {
+      commit('SET_LOADING', false)
+    }
+  },
+
   async clearAllProjects({ commit }) {
     commit('SET_LOADING', true)
     commit('SET_ERROR', null)
@@ -487,6 +660,153 @@ const actions = {
       throw error
     } finally {
       commit('SET_LOADING', false)
+    }
+  },
+
+  async exportProject({ commit }, projectId) {
+    commit('SET_LOADING', true)
+    commit('SET_ERROR', null)
+    
+    try {
+      // Import ProjectExportService
+      const { ProjectExportService } = await import('../../services/projectExportService.js')
+      
+      // Get project data
+      const projectData = storageService.getProject(projectId)
+      if (!projectData) {
+        throw new Error(`Project with ID ${projectId} not found`)
+      }
+      
+      // Export project to JSON
+      const jsonData = ProjectExportService.exportProject(projectData)
+      
+      // Generate filename
+      const filename = `${projectData.name || 'project'}_${new Date().toISOString().split('T')[0]}.json`
+      
+      // Download file
+      ProjectExportService.downloadJSON(jsonData, filename)
+      
+      const { operationSuccess } = useNotifications()
+      operationSuccess('export', 'Proyecto')
+      
+      return {
+        success: true,
+        filename,
+        size: jsonData.length
+      }
+    } catch (error) {
+      const { handleError } = useErrorHandler()
+      handleError(error, 'Exporting project')
+      
+      commit('SET_ERROR', error.message)
+      throw error
+    } finally {
+      commit('SET_LOADING', false)
+    }
+  },
+
+  async generateProjectFromAI({ commit, dispatch }, { prompt, apiKey }) {
+    commit('SET_LOADING', true)
+    commit('SET_ERROR', null)
+    
+    try {
+      // Import OpenAIService
+      const { OpenAIService } = await import('../../services/openAIService.js')
+      
+      // Validate inputs
+      if (!prompt || prompt.trim().length === 0) {
+        throw new Error('Project prompt is required')
+      }
+      
+      if (!apiKey || apiKey.trim().length === 0) {
+        throw new Error('OpenAI API key is required')
+      }
+      
+      // Initialize OpenAI service with API key
+      const aiService = new OpenAIService()
+      await aiService.initialize(apiKey)
+      
+      // Generate project from prompt
+      const projectData = await aiService.generateProject(prompt)
+      
+      // Validate generated project
+      const validation = aiService.validateGeneratedProject(projectData)
+      if (!validation.isValid) {
+        throw new Error(`Generated project validation failed: ${validation.errors.join(', ')}`)
+      }
+      
+      // Import the project using existing import functionality
+      const importedProject = await dispatch('importProject', projectData)
+      
+      const { operationSuccess } = useNotifications()
+      operationSuccess('generate', 'Proyecto con IA')
+      
+      return {
+        success: true,
+        project: importedProject,
+        prompt: prompt.substring(0, 100) + (prompt.length > 100 ? '...' : ''),
+        taskCount: projectData.tasks ? projectData.tasks.length : 0
+      }
+    } catch (error) {
+      const { handleError } = useErrorHandler()
+      
+      if (error.message.includes('API key') || error.message.includes('OpenAI')) {
+        handleError(error, 'AI service error')
+      } else if (error.message.includes('validation')) {
+        handleError(error, 'Generated project validation')
+      } else {
+        handleError(error, 'Generating project with AI')
+      }
+      
+      commit('SET_ERROR', error.message)
+      throw error
+    } finally {
+      commit('SET_LOADING', false)
+    }
+  },
+
+  async validateAIProjectGeneration({ commit }, { prompt, apiKey }) {
+    try {
+      // Basic validation
+      const errors = []
+      const warnings = []
+      
+      if (!prompt || prompt.trim().length === 0) {
+        errors.push('Project prompt is required')
+      } else if (prompt.trim().length < 10) {
+        warnings.push('Very short prompts may generate basic projects')
+      } else if (prompt.trim().length > 2000) {
+        warnings.push('Very long prompts may be truncated by the AI service')
+      }
+      
+      if (!apiKey || apiKey.trim().length === 0) {
+        errors.push('OpenAI API key is required')
+      } else if (!apiKey.startsWith('sk-')) {
+        warnings.push('API key format may be invalid (should start with "sk-")')
+      }
+      
+      // Check if prompt contains potentially problematic content
+      const problematicWords = ['hack', 'illegal', 'malicious', 'virus']
+      const lowerPrompt = prompt.toLowerCase()
+      const foundProblematic = problematicWords.filter(word => lowerPrompt.includes(word))
+      if (foundProblematic.length > 0) {
+        warnings.push(`Prompt contains potentially problematic words: ${foundProblematic.join(', ')}`)
+      }
+      
+      return {
+        isValid: errors.length === 0,
+        errors,
+        warnings,
+        promptLength: prompt.trim().length,
+        estimatedTokens: Math.ceil(prompt.trim().length / 4) // Rough estimate
+      }
+    } catch (error) {
+      commit('SET_ERROR', error.message)
+      return {
+        isValid: false,
+        errors: [`Validation error: ${error.message}`],
+        warnings: []
+      }
     }
   }
 }
@@ -524,6 +844,47 @@ const getters = {
       currentEndDate: project.endDate,
       taskCount: project.tasks ? project.tasks.length : 0,
       hasEndDate: !!project.endDate
+    }
+  },
+  
+  // New getters for date calculation helpers
+  getWorkingDaysBetween: () => (startDate, endDate) => {
+    try {
+      const { DateCalculationService } = require('../../services/dateCalculationService.js')
+      return DateCalculationService.calculateWorkingDays(startDate, endDate)
+    } catch (error) {
+      console.error('Error calculating working days:', error)
+      return 0
+    }
+  },
+  
+  addWorkingDaysToDate: () => (startDate, days) => {
+    try {
+      const { DateCalculationService } = require('../../services/dateCalculationService.js')
+      return DateCalculationService.addWorkingDays(startDate, days)
+    } catch (error) {
+      console.error('Error adding working days:', error)
+      return startDate
+    }
+  },
+  
+  isWorkingDay: () => (date) => {
+    try {
+      const { DateCalculationService } = require('../../services/dateCalculationService.js')
+      return DateCalculationService.isWorkingDay(date)
+    } catch (error) {
+      console.error('Error checking working day:', error)
+      return true
+    }
+  },
+  
+  validateDateRange: () => (startDate, endDate) => {
+    try {
+      const { DateCalculationService } = require('../../services/dateCalculationService.js')
+      return DateCalculationService.validateDateRange(startDate, endDate)
+    } catch (error) {
+      console.error('Error validating date range:', error)
+      return false
     }
   }
 }

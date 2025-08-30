@@ -11,7 +11,16 @@
         </p>
       </div>
       
-      <div class="flex-shrink-0">
+      <div class="flex-shrink-0 flex gap-3">
+        <button 
+          @click="showAIGenerator = true"
+          class="w-full sm:w-auto bg-purple-600 hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600 text-white px-4 py-2.5 rounded-lg flex items-center justify-center font-medium transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
+        >
+          <i class="pi pi-sparkles mr-2"></i>
+          <span class="hidden sm:inline">Generar con IA</span>
+          <span class="sm:hidden">IA</span>
+        </button>
+        
         <button 
           @click="showCreateForm = true"
           class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white px-4 py-2.5 rounded-lg flex items-center justify-center font-medium transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
@@ -100,6 +109,12 @@
       </template>
     </ResponsiveModal>
 
+    <!-- AI Project Generator Modal -->
+    <AIProjectGenerator
+      v-model:visible="showAIGenerator"
+      @project-imported="handleAIProjectImported"
+    />
+
     <!-- User Management Demo (temporary for testing) -->
     <UserManagementDemo />
 
@@ -121,6 +136,7 @@ import ProjectForm from '../components/project/ProjectForm.vue'
 import ResponsiveModal from '../components/ui/ResponsiveModal.vue'
 import LoadingSpinner from '../components/ui/LoadingSpinner.vue'
 import UserManagementDemo from '../components/project/UserManagementDemo.vue'
+import AIProjectGenerator from '../components/ui/AIProjectGenerator.vue'
 import { useToast } from '../composables/useToast.js'
 import { useTheme } from '../composables/useTheme'
 
@@ -131,7 +147,8 @@ export default {
     ProjectForm,
     ResponsiveModal,
     LoadingSpinner,
-    UserManagementDemo
+    UserManagementDemo,
+    AIProjectGenerator
   },
   setup() {
     const toast = useToast()
@@ -143,6 +160,7 @@ export default {
       showCreateForm: false,
       showEditForm: false,
       showDeleteConfirm: false,
+      showAIGenerator: false,
       editingProject: null,
       deletingProject: null,
       isDeleting: false
@@ -218,6 +236,15 @@ export default {
       } finally {
         this.isDeleting = false
       }
+    },
+
+    handleAIProjectImported(project) {
+      this.toast.success(
+        'Proyecto generado con IA',
+        `El proyecto "${project.name}" ha sido creado exitosamente usando inteligencia artificial.`
+      )
+      // Reload projects to show the new one
+      this.loadProjects()
     }
   },
   
