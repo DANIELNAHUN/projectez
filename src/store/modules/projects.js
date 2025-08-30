@@ -282,6 +282,192 @@ const actions = {
       throw error
     }
   },
+
+  async adjustProjectDates({ commit, state }, { projectId, newStartDate }) {
+    commit('SET_LOADING', true)
+    commit('SET_ERROR', null)
+    
+    try {
+      // Import Project and DateCalculationService classes
+      const { Project } = await import('../../models/index.js')
+      const { DateCalculationService } = await import('../../services/dateCalculationService.js')
+      
+      // Validate inputs
+      if (!projectId) {
+        throw new Error('Project ID is required')
+      }
+      
+      if (!newStartDate) {
+        throw new Error('New start date is required')
+      }
+      
+      // Get the project from storage to ensure we have the latest data
+      const projectData = storageService.getProject(projectId)
+      if (!projectData) {
+        throw new Error(`Project with ID ${projectId} not found`)
+      }
+      
+      // Create Project instance with current data
+      const project = Project.fromJSON(projectData)
+      
+      // Validate new start date
+      const newStart = newStartDate instanceof Date ? newStartDate : new Date(newStartDate)
+      if (isNaN(newStart.getTime())) {
+        throw new Error('Invalid start date provided')
+      }
+      
+      // Additional validation: check if new start date would cause issues
+      if (project.endDate && !DateCalculationService.validateDateRange(newStart, project.endDate)) {
+        const { operationWarning } = useNotifications()
+        operationWarning('La nueva fecha de inicio es posterior a la fecha de fin del proyecto')
+      }
+      
+      // Store original start date for rollback if needed
+      const originalStartDate = new Date(project.startDate)
+      
+      try {
+        // Adjust project dates
+        project.adjustProjectDates(newStart)
+        
+        // Recalculate project end date based on adjusted tasks
+        project.recalculateProjectEndDate()
+        
+        // Save updated project to storage
+        await storageService.saveProject(project)
+        
+        // Update store state
+        commit('UPDATE_PROJECT', project)
+        
+        const { operationSuccess } = useNotifications()
+        operationSuccess('update', 'Fechas del proyecto')
+        
+        return {
+          success: true,
+          project: project,
+          adjustedTasks: project.tasks.length
+        }
+        
+      } catch (adjustmentError) {
+        // Rollback on failure
+        project.startDate = originalStartDate
+        throw new Error(`Failed to adjust project dates: ${adjustmentError.message}`)
+      }
+      
+    } catch (error) {
+      const { handleError, handleValidationError } = useErrorHandler()
+      
+      if (error.message.includes('required') || error.message.includes('Invalid')) {
+        handleValidationError(error, 'Adjusting project dates')
+      } else {
+        handleError(error, 'Adjusting project dates')
+      }
+      
+      commit('SET_ERROR', error.message)
+      throw error
+    } finally {
+      commit('SET_LOADING', false)
+    }
+  },
+
+  async validateProjectDateAdjustment({ state }, { projectId, newStartDate }) {
+    try {
+      // Import required classes
+      const { DateCalculationService } = await import('../../services/dateCalculationService.js')
+      
+      // Validate inputs
+      if (!projectId || !newStartDate) {
+        return {
+          isValid: false,
+          errors: ['Project ID and new start date are required'],
+          warnings: []
+        }
+      }
+      
+      // Get project data
+      const projectData = storageService.getProject(projectId)
+      if (!projectData) {
+        return {
+          isValid: false,
+          errors: [`Project with ID ${projectId} not found`],
+          warnings: []
+        }
+      }
+      
+      const newStart = newStartDate instanceof Date ? newStartDate : new Date(newStartDate)
+      if (isNaN(newStart.getTime())) {
+        return {
+          isValid: false,
+          errors: ['Invalid start date provided'],
+          warnings: []
+        }
+      }
+      
+      const errors = []
+      const warnings = []
+      
+      // Check if new start date is after project end date
+      if (projectData.endDate) {
+        const projectEndDate = new Date(projectData.endDate)
+        if (!DateCalculationService.validateDateRange(newStart, projectEndDate)) {
+          warnings.push('New start date is after project end date')
+        }
+      }
+      
+      // Check if new start date is a working day
+      if (!DateCalculationService.isWorkingDay(newStart)) {
+        warnings.push('New start date falls on a non-working day (Sunday)')
+      }
+      
+      // Check if adjustment would cause tasks to have invalid dates
+      const originalStart = new Date(projectData.startDate)
+      const isMovingForward = newStart >= originalStart
+      let daysDifference
+      
+      if (isMovingForward) {
+        daysDifference = DateCalculationService.calculateWorkingDays(originalStart, newStart)
+      } else {
+        daysDifference = DateCalculationService.calculateWorkingDays(newStart, originalStart)
+      }
+      
+      // Validate that all tasks can be adjusted
+      if (projectData.tasks && projectData.tasks.length > 0) {
+        for (const task of projectData.tasks) {
+          try {
+            const taskStartDate = new Date(task.startDate)
+            let newTaskStartDate
+            
+            if (isMovingForward) {
+              newTaskStartDate = DateCalculationService.addWorkingDays(taskStartDate, daysDifference)
+            } else {
+              newTaskStartDate = DateCalculationService.subtractWorkingDays(taskStartDate, daysDifference)
+            }
+            
+            // Check if new task start date is valid
+            if (isNaN(newTaskStartDate.getTime())) {
+              errors.push(`Task "${task.title}" would have an invalid start date after adjustment`)
+            }
+          } catch (taskError) {
+            errors.push(`Error validating task "${task.title}": ${taskError.message}`)
+          }
+        }
+      }
+      
+      return {
+        isValid: errors.length === 0,
+        errors,
+        warnings,
+        daysDifference,
+        affectedTasks: projectData.tasks ? projectData.tasks.length : 0
+      }
+      
+    } catch (error) {
+      return {
+        isValid: false,
+        errors: [`Validation error: ${error.message}`],
+        warnings: []
+      }
+    }
+  },
   
   async clearAllProjects({ commit }) {
     commit('SET_LOADING', true)
@@ -327,6 +513,18 @@ const getters = {
   
   currentProjectTeamMembers: state => {
     return state.currentProject ? state.currentProject.teamMembers : []
+  },
+  
+  getProjectDateAdjustmentInfo: state => projectId => {
+    const project = state.projects.find(p => p.id === projectId)
+    if (!project) return null
+    
+    return {
+      currentStartDate: project.startDate,
+      currentEndDate: project.endDate,
+      taskCount: project.tasks ? project.tasks.length : 0,
+      hasEndDate: !!project.endDate
+    }
   }
 }
 
