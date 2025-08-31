@@ -92,7 +92,7 @@ const store = useStore()
 const { isDarkMode } = useTheme()
 const isLoading = ref(false)
 const error = ref(null)
-const showStoreTest = ref(import.meta.env.DEV)
+const showStoreTest = ref(import.meta.env.VITE_APP_ENVIROMENT === "DEV")
 
 // Computed stats
 const stats = computed(() => [

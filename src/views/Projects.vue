@@ -122,7 +122,7 @@
     />
 
     <!-- User Management Demo (temporary for testing) -->
-    <UserManagementDemo />
+    <UserManagementDemo v-if="showUserManagementDemo"/>
 
     <!-- Projects List -->
     <ProjectList
@@ -171,7 +171,8 @@ export default {
       showAIGenerator: false,
       editingProject: null,
       deletingProject: null,
-      isDeleting: false
+      isDeleting: false,
+      showUserManagementDemo: import.meta.env.VITE_APP_ENVIROMENT === "DEV"
     }
   },
   methods: {

@@ -3,8 +3,8 @@
     left: position + 'px',
     width: width + 'px',
     backgroundColor: task.color,
-    top: '4px',
-    bottom: '4px'
+    top: '8px',
+    bottom: '8px'
   }" class="gantt-task-bar absolute rounded cursor-pointer shadow-sm hover:shadow-md transition-all duration-200"
     :class="[getTaskBarClasses(), { 'gantt-task-bar--dragging': isDragging }]" @mousedown="startDrag"
     @click="selectTask" @contextmenu.prevent="showContextMenu" :title="getTaskTooltip()">
@@ -12,9 +12,10 @@
     <div v-if="task.progress > 0" :style="{ width: task.progress + '%' }"
       class="progress-indicator absolute inset-y-0 left-0 bg-black bg-opacity-20 rounded-l"></div>
 
-    <!-- Task title inside the bar -->
+    <!-- Task title with adaptive contrast -->
     <div
-      class="task-title absolute inset-y-0 left-0 flex items-center px-2 text-xs text-gray-800 font-medium whitespace-nowrap z-10">
+      class="task-title absolute inset-y-0 left-0 flex items-center px-2 text-xs font-medium whitespace-nowrap z-10"
+      :style="getTitleStyles()">
       {{ truncatedTitle }}
     </div>
 
@@ -97,6 +98,39 @@ const getTaskTooltip = () => {
   return `${props.task.title}\n${startDate} - ${endDate}\nDuración: ${duration} día${duration !== 1 ? 's' : ''}\nProgreso: ${progress}%`
 }
 
+// Function to calculate luminance of a color
+const getLuminance = (color) => {
+  // Convert hex to RGB
+  const hex = color.replace('#', '')
+  const r = parseInt(hex.substr(0, 2), 16) / 255
+  const g = parseInt(hex.substr(2, 2), 16) / 255
+  const b = parseInt(hex.substr(4, 2), 16) / 255
+
+  // Calculate relative luminance
+  const sRGB = [r, g, b].map(c => {
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
+  })
+
+  return 0.2126 * sRGB[0] + 0.7152 * sRGB[1] + 0.0722 * sRGB[2]
+}
+
+// Function to get adaptive text styles
+const getTitleStyles = () => {
+  const backgroundColor = props.task.color || '#3b82f6'
+  const luminance = getLuminance(backgroundColor)
+  
+  // Use white text on dark backgrounds, dark text on light backgrounds
+  const textColor = luminance > 0.5 ? '#1f2937' : '#ffffff'
+  
+  return {
+    color: textColor,
+    textShadow: luminance > 0.5 
+      ? '0 1px 2px rgba(0, 0, 0, 0.1)' 
+      : '0 1px 2px rgba(0, 0, 0, 0.5)',
+    fontWeight: '500'
+  }
+}
+
 // Methods
 const selectTask = () => {
   emit('task-select', props.task)
@@ -151,8 +185,8 @@ const showContextMenu = (event) => {
 
 <style scoped>
 .gantt-task-bar {
-  min-height: 24px;
-  border-radius: 4px;
+  min-height: 32px;
+  border-radius: 6px;
   transition: all 0.2s ease;
   position: relative;
   overflow: visible;
@@ -196,6 +230,8 @@ const showContextMenu = (event) => {
   overflow: visible;
   white-space: nowrap;
   min-width: max-content;
+  line-height: 1.2;
+  letter-spacing: 0.025em;
 }
 
 .resize-handle {

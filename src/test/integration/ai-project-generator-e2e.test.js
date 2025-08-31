@@ -8,7 +8,7 @@ import { mount } from '@vue/test-utils'
 import { createStore } from 'vuex'
 import { OpenAIService } from '../../services/openAIService.js'
 import { ProjectExportService } from '../../services/projectExportService.js'
-import { ProjectImportService } from '../../services/projectImportService.js'
+// import { ProjectImportService } from '../../services/projectImportService.js'
 import { DateCalculationService } from '../../services/dateCalculationService.js'
 import { Project, Task, TeamMember } from '../../models/index.js'
 

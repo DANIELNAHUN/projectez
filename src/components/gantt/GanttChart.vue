@@ -14,7 +14,8 @@
               <span class="text-green-600">{{ projectStats.completedTasks }} completadas</span>
               <span class="text-blue-600">{{ projectStats.inProgressTasks }} en progreso</span>
               <span class="text-yellow-600">{{ projectStats.pendingTasks }} pendientes</span>
-              <span v-if="projectStats.cancelledTasks > 0" class="text-gray-500">{{ projectStats.cancelledTasks }} canceladas</span>
+              <span v-if="projectStats.cancelledTasks > 0" class="text-gray-500">{{ projectStats.cancelledTasks }}
+                canceladas</span>
             </div>
             <div v-if="projectStats" class="flex items-center space-x-2">
               <span>Progreso general:</span>
@@ -29,14 +30,14 @@
 
         <!-- Zoom controls -->
         <div class="flex items-center space-x-2">
-          <!-- Temporary test button -->
+          <!-- Temporary test button 
           <button @click="toggleSidebar" class="px-3 py-1 text-sm rounded border" :style="{
             borderColor: isDarkMode ? '#4b5563' : '#d1d5db',
             backgroundColor: isDarkMode ? '#374151' : '#ffffff',
             color: isDarkMode ? '#f9fafb' : '#111827'
           }">
             {{ isSidebarMinimized ? 'Expandir' : 'Minimizar' }} Sidebar
-          </button>
+          </button> -->
 
           <label class="text-sm" :style="secondaryTextStyles">Vista:</label>
           <select v-model="selectedZoomLevel" @change="handleZoomChange" class="border rounded px-2 py-1 text-sm"
@@ -64,13 +65,14 @@
 
         <!-- Sidebar toggle button -->
         <button @click="toggleSidebar"
-          class="sidebar-toggle-btn absolute top-3 right-3 z-50 p-2 rounded-full transition-all duration-200 hover:scale-110 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-lg"
+          class="sidebar-toggle-btn absolute -top-1 -right-1 z-50 p-1.5 rounded-md transition-all duration-200 hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-gray-400 border"
           :style="{
-            backgroundColor: isDarkMode ? '#3b82f6' : '#2563eb',
-            color: '#ffffff',
-            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
+            backgroundColor: isDarkMode ? '#374151' : '#f3f4f6',
+            color: isDarkMode ? '#d1d5db' : '#6b7280',
+            borderColor: isDarkMode ? '#4b5563' : '#d1d5db',
+            boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
           }" :title="isSidebarMinimized ? 'Expandir barra lateral' : 'Minimizar barra lateral'">
-          <i :class="isSidebarMinimized ? 'pi pi-angle-double-right' : 'pi pi-angle-double-left'" class="text-sm"></i>
+          <i :class="isSidebarMinimized ? 'pi pi-angle-double-right' : 'pi pi-angle-double-left'" class="text-xs"></i>
         </button>
 
         <!-- Minimized sidebar (icons only) -->
@@ -119,7 +121,8 @@
         backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
         borderColor: isDarkMode ? '#374151' : '#e5e7eb',
         alignSelf: 'flex-start',
-        minHeight: timelineMinHeight + 'px'
+        minHeight: timelineMinHeight + 'px',
+        height: '100dvh'
       }">
         <GanttTimeline :timeline-start="timelineStart" :timeline-end="timelineEnd" :zoom-level="zoomLevel"
           :tasks="ganttTasks" :total-width="totalTimelineWidth" @task-date-change="handleTaskDateChange"
@@ -209,10 +212,10 @@ const error = computed(() => store.getters['gantt/error'])
 // Calculate timeline minimum height based on content
 const timelineMinHeight = computed(() => {
   const headerHeight = 60 // Timeline header height
-  const taskRowHeight = 40 // Height per task row
+  const taskRowHeight = 48 // Height per task row (matches GanttTimeline)
   const minTasks = Math.max(ganttTasks.value.length, 10) // Minimum 10 rows for better UX
   const padding = 20 // Extra padding
-  
+
   return headerHeight + (minTasks * taskRowHeight) + padding
 })
 
@@ -393,8 +396,8 @@ onMounted(() => {
 }
 
 .sidebar-toggle-btn {
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -429,7 +432,7 @@ onMounted(() => {
 }
 
 .sidebar-toggle-btn:hover {
-  transform: scale(1.05);
+  transform: translateY(-1px);
 }
 
 .gantt-timeline-container {

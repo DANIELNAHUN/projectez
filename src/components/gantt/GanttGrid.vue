@@ -17,63 +17,57 @@
     <!-- Task list -->
     <div class="grid-body">
       <div v-for="(task, index) in tasks" :key="task.id" :style="{ height: taskRowHeight + 'px' }"
-        class="task-row flex items-center px-4 border-b border-gray-50 hover:bg-gray-25 transition-colors"
+        class="task-row flex items-center px-3 py-2 border-b border-gray-50 hover:bg-gray-25 transition-colors"
         :class="getTaskRowClasses(task)">
         <!-- Task hierarchy and title -->
-        <div class="flex-1 flex items-center min-w-0">
+        <div class="flex-1 flex items-center min-w-0 pr-3">
           <!-- Indentation for hierarchy -->
-          <div :style="{ width: (task.level * 16) + 'px' }" class="flex-shrink-0"></div>
+          <div :style="{ width: (task.level * 12) + 'px' }" class="flex-shrink-0"></div>
 
           <!-- Task icon based on type and status -->
           <div class="flex-shrink-0 mr-2">
-            <i :class="getTaskIcon(task)" class="text-sm" :style="{ color: task.color }"></i>
+            <i :class="getTaskIcon(task)" class="text-xs" :style="{ color: task.color }"></i>
           </div>
 
           <!-- Task title and info -->
           <div class="min-w-0 flex-1">
-            <div class="flex items-center">
-              <h5 class="text-sm font-medium text-gray-900 truncate">
+            <div class="flex items-center mb-1">
+              <h5 class="text-xs font-medium text-gray-900 truncate leading-tight">
                 {{ task.title }}
               </h5>
               <span v-if="task.type === 'with_deliverable'"
-                class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                class="ml-1.5 inline-flex items-center px-1 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">
                 Entregable
               </span>
             </div>
 
-            <!-- Task dates -->
-            <div class="flex items-center mt-1 text-xs text-gray-500">
+            <!-- Task dates - more compact -->
+            <div class="flex items-center text-xs text-gray-500 leading-tight">
               <span>{{ formatDate(task.start) }}</span>
               <span class="mx-1">→</span>
               <span>{{ formatDate(task.end) }}</span>
-              <span class="ml-2 text-gray-400">
-                ({{ task.duration }} día{{ task.duration !== 1 ? 's' : '' }})
+              <span class="ml-1.5 text-gray-400">
+                ({{ task.duration }}{{ task.duration !== 1 ? 'd' : 'd' }})
               </span>
-            </div>
-
-            <!-- Assigned to -->
-            <div v-if="task.assignedTo" class="mt-1 text-xs text-gray-500">
-              <i class="pi pi-user mr-1"></i>
-              {{ getAssignedUserName(task.assignedTo) }}
             </div>
           </div>
         </div>
 
-        <!-- Task status and progress -->
-        <div class="flex-shrink-0 flex items-center space-x-3 ml-4">
+        <!-- Task status and progress - more compact -->
+        <div class="flex-shrink-0 flex flex-col items-end space-y-1 min-w-0">
           <!-- Status badge -->
           <span :class="getStatusBadgeClasses(task.status)"
-            class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium">
+            class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium">
             {{ getStatusLabel(task.status) }}
           </span>
 
           <!-- Progress indicator -->
-          <div class="flex items-center space-x-2">
-            <div class="w-12 bg-gray-200 rounded-full h-2">
+          <div class="flex items-center space-x-1.5">
+            <div class="w-10 bg-gray-200 rounded-full h-1.5">
               <div :style="{ width: task.progress + '%', backgroundColor: task.color }"
-                class="h-2 rounded-full transition-all duration-300"></div>
+                class="h-1.5 rounded-full transition-all duration-300"></div>
             </div>
-            <span class="text-xs text-gray-600 w-8 text-right">
+            <span class="text-xs text-gray-600 w-6 text-right font-medium">
               {{ task.progress }}%
             </span>
           </div>
@@ -113,7 +107,7 @@ const props = defineProps({
 const store = useStore()
 
 // Constants
-const taskRowHeight = 40
+const taskRowHeight = 48
 
 // Computed
 const teamMembers = computed(() => {
@@ -167,10 +161,7 @@ const formatDate = (date) => {
   })
 }
 
-const getAssignedUserName = (userId) => {
-  const member = teamMembers.value.find(m => m.id === userId)
-  return member ? member.name : 'Usuario desconocido'
-}
+// Removed getAssignedUserName to simplify the UI
 </script>
 
 <style scoped>
@@ -195,6 +186,7 @@ const getAssignedUserName = (userId) => {
 
 .task-row {
   cursor: pointer;
+  min-height: 48px;
 }
 
 .task-row:hover {

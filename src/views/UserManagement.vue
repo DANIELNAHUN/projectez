@@ -13,6 +13,7 @@
       
       <div class="flex-shrink-0 flex space-x-3">
         <button 
+          v-if="showCreateSampleUsers"
           @click="createSampleUsers"
           class="bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white px-4 py-2.5 rounded-lg flex items-center justify-center font-medium transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
         >
@@ -332,7 +333,8 @@ export default {
       showDeleteConfirm: false,
       showClearAllConfirm: false,
       editingUser: null,
-      deletingUser: null
+      deletingUser: null,
+      showCreateSampleUsers:  import.meta.env.VITE_APP_ENVIROMENT === "DEV"
     }
   },
   computed: {
