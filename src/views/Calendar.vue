@@ -1,14 +1,8 @@
 <template>
   <div>
     <!-- Header -->
-    <CalendarNavigation 
-      :current-view="currentView" 
-      :current-project="currentProject"
-      @view-change="setCurrentView" 
-      @navigate-previous="navigatePrevious"
-      @navigate-next="navigateNext" 
-      @navigate-today="navigateToToday" 
-    />
+    <CalendarNavigation :current-view="currentView" :current-project="currentProject" @view-change="setCurrentView"
+      @navigate-previous="navigatePrevious" @navigate-next="navigateNext" @navigate-today="navigateToToday" />
 
     <!-- Project Selector and Current Date Display -->
     <div class="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -17,25 +11,16 @@
           {{ formattedSelectedDate }}
         </h3>
       </div>
-      
+
       <!-- Project Selector -->
       <div class="flex items-center gap-3">
         <label for="project-selector" class="text-sm font-medium text-gray-700 whitespace-nowrap">
           Proyecto:
         </label>
-        <Select
-          id="project-selector"
-          v-model="selectedProjectId"
-          :options="projectOptions"
-          option-label="name"
-          option-value="id"
-          placeholder="Seleccionar proyecto"
-          class="w-64"
-          :loading="isLoadingProjects"
-          :disabled="isLoadingProjects || allProjects.length === 0"
-          @change="handleProjectChange"
-          v-tooltip="allProjects.length === 0 ? 'No hay proyectos disponibles' : 'Selecciona un proyecto para ver sus tareas en el calendario'"
-        >
+        <Select id="project-selector" v-model="selectedProjectId" :options="projectOptions" option-label="name"
+          option-value="id" placeholder="Seleccionar proyecto" class="w-64" :loading="isLoadingProjects"
+          :disabled="isLoadingProjects || allProjects.length === 0" @change="handleProjectChange"
+          v-tooltip="allProjects.length === 0 ? 'No hay proyectos disponibles' : 'Selecciona un proyecto para ver sus tareas en el calendario'">
           <template #value="slotProps">
             <div v-if="slotProps.value" class="flex items-center">
               <span class="w-3 h-3 rounded-full mr-2" :class="getProjectStatusColor(slotProps.value)"></span>
@@ -53,33 +38,23 @@
                 </div>
               </div>
               <div class="flex items-center gap-2">
-                <span v-if="getProjectTasksInCurrentView(slotProps.option.id) > 0" 
-                      class="text-xs badge-blue px-2 py-1 rounded-full">
+                <span v-if="getProjectTasksInCurrentView(slotProps.option.id) > 0"
+                  class="text-xs badge-blue px-2 py-1 rounded-full">
                   {{ getProjectTasksInCurrentView(slotProps.option.id) }} en vista
                 </span>
-                <span class="text-xs text-gray-400 capitalize">{{ getProjectStatusText(slotProps.option.status) }}</span>
+                <span class="text-xs text-gray-400 capitalize">{{ getProjectStatusText(slotProps.option.status)
+                }}</span>
               </div>
             </div>
           </template>
         </Select>
-        
+
         <!-- Quick Actions -->
         <div class="flex items-center gap-2">
-          <Button
-            icon="pi pi-plus"
-            severity="secondary"
-            size="small"
-            v-tooltip="'Crear nuevo proyecto'"
-            @click="handleCreateProject"
-          />
-          <Button
-            icon="pi pi-refresh"
-            severity="secondary"
-            size="small"
-            v-tooltip="'Actualizar calendario'"
-            @click="loadCalendarEvents"
-            :loading="isLoading"
-          />
+          <Button icon="pi pi-plus" severity="secondary" size="small" v-tooltip="'Crear nuevo proyecto'"
+            @click="handleCreateProject" />
+          <Button icon="pi pi-refresh" severity="secondary" size="small" v-tooltip="'Actualizar calendario'"
+            @click="loadCalendarEvents" :loading="isLoading" />
         </div>
       </div>
     </div>
@@ -107,10 +82,13 @@
         <div v-if="!currentProject && allProjects.length === 0" class="text-center py-12">
           <i class="pi pi-calendar text-gray-400 text-4xl mb-4"></i>
           <p class="text-gray-500 mb-4">No hay proyectos disponibles</p>
-          <p class="text-sm text-gray-400 mb-6">Crea un proyecto o carga datos de ejemplo para comenzar a usar el calendario</p>
+          <p class="text-sm text-gray-400 mb-6">Crea un proyecto o carga datos de ejemplo para comenzar a usar el
+            calendario
+          </p>
           <div class="space-x-3">
             <Button label="Crear Proyecto" @click="handleCreateProject" />
-            <Button label="Cargar Datos de Ejemplo" @click="loadSampleData" :loading="loadingSampleData" severity="secondary" />
+            <Button label="Cargar Datos de Ejemplo" @click="loadSampleData" :loading="loadingSampleData"
+              severity="secondary" />
           </div>
         </div>
 
@@ -129,21 +107,16 @@
                   <div class="flex items-center gap-4 mt-2">
                     <div class="flex items-center gap-1">
                       <span class="w-2 h-2 rounded-full" :class="getProjectStatusColor(currentProject.id)"></span>
-                      <span class="text-xs font-medium text-gray-700 capitalize">{{ getProjectStatusText(currentProject.status) }}</span>
+                      <span class="text-xs font-medium text-gray-700 capitalize">{{
+                        getProjectStatusText(currentProject.status) }}</span>
                     </div>
                     <span class="text-xs text-gray-500">{{ getProjectTaskCount(currentProject.id) }}</span>
                     <span class="text-xs text-gray-500">{{ getProjectDateRange(currentProject) }}</span>
                   </div>
                 </div>
               </div>
-              <Button
-                icon="pi pi-external-link"
-                severity="secondary"
-                text
-                size="small"
-                @click="router.push(`/projects/${currentProject.id}`)"
-                v-tooltip="'Ver detalles del proyecto'"
-              />
+              <Button icon="pi pi-external-link" severity="secondary" text size="small"
+                @click="router.push(`/projects/${currentProject.id}`)" v-tooltip="'Ver detalles del proyecto'" />
             </div>
           </div>
 
@@ -164,20 +137,17 @@
         <!-- Calendar Views -->
         <div v-else class="space-y-6">
           <!-- Project Statistics (when project is selected and has tasks) -->
-          <ProjectStats 
-            v-if="currentProject && currentViewEvents && currentViewEvents.length > 0"
-            :project="currentProject"
-            :tasks-in-current-view="currentViewEvents.length"
-            @view-project="router.push(`/projects/${currentProject.id}`)"
-          />
-          
+          <ProjectStats v-if="currentProject && currentViewEvents && currentViewEvents.length > 0"
+            :project="currentProject" :tasks-in-current-view="currentViewEvents.length"
+            @view-project="router.push(`/projects/${currentProject.id}`)" />
+
           <!-- Month View -->
           <div v-if="currentView === 'month'" class="calendar-month">
             <BasicCalendarGrid v-if="!currentViewEvents || currentViewEvents.length === 0" :selected-date="selectedDate"
               @date-click="handleDateClick" />
-            <CalendarMonth v-else :selected-date="selectedDate" :events="currentViewEvents" @date-click="handleDateClick"
-              @task-edit="handleTaskEdit" @task-drag-start="handleTaskDragStart" @task-drag-end="handleTaskDragEnd"
-              @date-drop="handleDateDrop" />
+            <CalendarMonth v-else :selected-date="selectedDate" :events="currentViewEvents"
+              @date-click="handleDateClick" @task-edit="handleTaskEdit" @task-drag-start="handleTaskDragStart"
+              @task-drag-end="handleTaskDragEnd" @date-drop="handleDateDrop" />
           </div>
 
           <!-- Week View -->
@@ -198,21 +168,12 @@
     </div>
 
     <!-- Quick Task Form -->
-    <QuickTaskForm 
-      v-model:visible="showQuickTaskForm" 
-      :selected-date="clickedDate"
-      @task-created="handleTaskCreated"
-      @open-full-form="handleOpenFullForm"
-    />
+    <QuickTaskForm v-model:visible="showQuickTaskForm" :selected-date="clickedDate" @task-created="handleTaskCreated"
+      @open-full-form="handleOpenFullForm" />
 
     <!-- Task Edit Modal -->
-    <TaskEditModal 
-      v-model:visible="showTaskModal" 
-      :task="selectedTask" 
-      :initial-date="selectedDate"
-      :initial-data="initialTaskData"
-      @task-saved="handleTaskSaved" 
-    />
+    <TaskEditModal v-model:visible="showTaskModal" :task="selectedTask" :initial-date="selectedDate"
+      :initial-data="initialTaskData" @task-saved="handleTaskSaved" />
   </div>
 </template>
 
@@ -259,12 +220,23 @@ const isLoadingProjects = computed(() => store.getters['projects/isLoading'])
 
 // Project selector options
 const projectOptions = computed(() => {
-  return allProjects.value.map(project => ({
+  const options = [
+    {
+      id: 'all',
+      name: 'Todos los proyectos',
+      status: 'active',
+      taskCount: allProjects.value.reduce((total, project) => total + (project.tasks?.length || 0), 0)
+    }
+  ]
+
+  const projectList = allProjects.value.map(project => ({
     id: project.id,
     name: project.name,
     status: project.status,
     taskCount: project.tasks?.length || 0
   }))
+
+  return [...options, ...projectList]
 })
 
 // Methods
@@ -294,7 +266,7 @@ const handleDateClick = (date, isEmpty = true) => {
   clickedDate.value = date
   selectedTask.value = null
   initialTaskData.value = null
-  
+
   if (isEmpty) {
     // Show quick task form for empty dates/time slots
     showQuickTaskForm.value = true
@@ -378,17 +350,21 @@ const handleProjectChange = async (event) => {
   const projectId = event.value
   if (projectId) {
     try {
-      // Set the selected project as current
-      await store.dispatch('projects/setCurrentProject', projectId)
-      // Reload calendar events for the new project
-      await loadCalendarEvents()
-      
-      // Show success message
-      const project = allProjects.value.find(p => p.id === projectId)
-      if (project) {
-        // You could add a toast notification here if you have a toast service
-        console.log(`Proyecto cambiado a: ${project.name}`)
+      if (projectId === 'all') {
+        // Clear current project to show all projects
+        await store.dispatch('projects/clearCurrentProject')
+        console.log('Mostrando tareas de todos los proyectos')
+      } else {
+        // Set the selected project as current
+        await store.dispatch('projects/setCurrentProject', projectId)
+        const project = allProjects.value.find(p => p.id === projectId)
+        if (project) {
+          console.log(`Proyecto cambiado a: ${project.name}`)
+        }
       }
+
+      // Reload calendar events for the new selection
+      await loadCalendarEvents()
     } catch (error) {
       console.error('Error changing project:', error)
       // You could show an error toast here
@@ -401,25 +377,35 @@ const handleCreateProject = () => {
 }
 
 const getProjectName = (projectId) => {
+  if (projectId === 'all') {
+    return 'Todos los proyectos'
+  }
   const project = allProjects.value.find(p => p.id === projectId)
   return project?.name || 'Proyecto desconocido'
 }
 
 const getProjectStatusColor = (projectId) => {
+  if (projectId === 'all') {
+    return 'project-status-active'
+  }
   const project = allProjects.value.find(p => p.id === projectId)
   if (!project) return 'project-status-default'
-  
+
   const statusColors = {
     active: 'project-status-active',
     completed: 'project-status-completed',
     paused: 'project-status-paused',
     cancelled: 'project-status-cancelled'
   }
-  
+
   return statusColors[project.status] || 'project-status-default'
 }
 
 const getProjectTaskCount = (projectId) => {
+  if (projectId === 'all') {
+    const totalTasks = allProjects.value.reduce((total, project) => total + (project.tasks?.length || 0), 0)
+    return `${totalTasks} ${totalTasks === 1 ? 'tarea' : 'tareas'} en total`
+  }
   const project = allProjects.value.find(p => p.id === projectId)
   const taskCount = project?.tasks?.length || 0
   return `${taskCount} ${taskCount === 1 ? 'tarea' : 'tareas'}`
@@ -437,16 +423,16 @@ const getProjectStatusText = (status) => {
 
 const getProjectDateRange = (project) => {
   if (!project.startDate) return 'Sin fechas'
-  
+
   const startDate = new Date(project.startDate)
   const endDate = project.endDate ? new Date(project.endDate) : null
-  
-  const formatDate = (date) => date.toLocaleDateString('es-ES', { 
-    day: 'numeric', 
+
+  const formatDate = (date) => date.toLocaleDateString('es-ES', {
+    day: 'numeric',
     month: 'short',
     year: 'numeric'
   })
-  
+
   if (endDate) {
     return `${formatDate(startDate)} - ${formatDate(endDate)}`
   } else {
@@ -457,13 +443,13 @@ const getProjectDateRange = (project) => {
 const getProjectTasksInCurrentView = (projectId) => {
   // Get all events for the project
   const projectEvents = store.getters['calendar/events'].filter(event => event.projectId === projectId)
-  
+
   // Get current view date range
   const selectedDate = store.getters['calendar/selectedDate']
   const currentView = store.getters['calendar/currentView']
-  
+
   let startDate, endDate
-  
+
   switch (currentView) {
     case 'day':
       startDate = new Date(selectedDate)
@@ -471,31 +457,31 @@ const getProjectTasksInCurrentView = (projectId) => {
       endDate = new Date(selectedDate)
       endDate.setHours(23, 59, 59, 999)
       break
-      
+
     case 'week':
       const dayOfWeek = selectedDate.getDay()
       const diff = selectedDate.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1)
       startDate = new Date(selectedDate)
       startDate.setDate(diff)
       startDate.setHours(0, 0, 0, 0)
-      
+
       endDate = new Date(startDate)
       endDate.setDate(startDate.getDate() + 6)
       endDate.setHours(23, 59, 59, 999)
       break
-      
+
     case 'month':
       startDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1)
       startDate.setHours(0, 0, 0, 0)
-      
+
       endDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0)
       endDate.setHours(23, 59, 59, 999)
       break
-      
+
     default:
       return 0
   }
-  
+
   // Count events that overlap with the current view period
   return projectEvents.filter(event => {
     const eventStart = new Date(event.start)
@@ -508,6 +494,9 @@ const getProjectTasksInCurrentView = (projectId) => {
 watch(() => store.getters['projects/currentProject'], (newProject) => {
   if (newProject) {
     selectedProjectId.value = newProject.id
+  } else {
+    // If no current project, show all projects
+    selectedProjectId.value = 'all'
   }
   loadCalendarEvents()
 }, { immediate: true })
@@ -516,17 +505,16 @@ watch(() => store.getters['projects/currentProject'], (newProject) => {
 onMounted(async () => {
   // Load projects first
   await store.dispatch('projects/loadProjects')
-  
+
   // Set initial selected project if there's a current project
   const current = store.getters['projects/currentProject']
   if (current) {
     selectedProjectId.value = current.id
   } else if (allProjects.value.length > 0) {
-    // If no current project but projects exist, select the first one
-    selectedProjectId.value = allProjects.value[0].id
-    await store.dispatch('projects/setCurrentProject', allProjects.value[0].id)
+    // If no current project but projects exist, show all projects by default
+    selectedProjectId.value = 'all'
   }
-  
+
   // Initialize calendar
   loadCalendarEvents()
 })
@@ -599,7 +587,7 @@ onMounted(async () => {
   :deep(.p-select) {
     min-width: 200px;
   }
-  
+
   :deep(.p-select-overlay) {
     min-width: 280px;
   }

@@ -808,6 +808,10 @@ const actions = {
         warnings: []
       }
     }
+  },
+
+  clearCurrentProject({ commit }) {
+    commit('SET_CURRENT_PROJECT', null)
   }
 }
 
