@@ -472,7 +472,7 @@ const getWeekNumber = (date) => {
 .timeline-body {
   position: relative;
   min-height: fit-content;
-  height: auto;
+  height: 100%;
   background-color: #f8fafc;
 }
 
@@ -485,7 +485,7 @@ const getWeekNumber = (date) => {
 .task-bars {
   position: relative;
   min-height: 200px;
-  height: 100%;
+  height: auto;
 }
 
 .task-row {

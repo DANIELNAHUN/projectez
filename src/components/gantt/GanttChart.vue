@@ -122,7 +122,8 @@
         borderColor: isDarkMode ? '#374151' : '#e5e7eb',
         alignSelf: 'flex-start',
         minHeight: timelineMinHeight + 'px',
-        height: '100dvh'
+        height: '100dvh',
+        overflowY: 'hidden'
       }">
         <GanttTimeline :timeline-start="timelineStart" :timeline-end="timelineEnd" :zoom-level="zoomLevel"
           :tasks="ganttTasks" :total-width="totalTimelineWidth" @task-date-change="handleTaskDateChange"
