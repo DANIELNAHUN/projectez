@@ -74,6 +74,7 @@ export class InitializationService {
       results.totalTime = Date.now() - startTime
       
       console.log(`Application initialization completed successfully in ${results.totalTime}ms`)
+      console.clear()
       
       return results
     } catch (error) {

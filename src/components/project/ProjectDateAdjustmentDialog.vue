@@ -307,9 +307,10 @@ export default {
 
       try {
         // Validate the new start date
+        const { DateCalculationService } = await import('../../services/dateCalculationService.js')
         const validation = await store.dispatch('projects/validateProjectDateAdjustment', {
           projectId: props.project.id,
-          newStartDate: new Date(newStartDate.value)
+          newStartDate: DateCalculationService.parseDate(newStartDate.value)
         })
 
         if (!validation.isValid) {
@@ -321,7 +322,12 @@ export default {
           // Show warnings if any
           if (validation.warnings && validation.warnings.length > 0) {
             validation.warnings.forEach(warning => {
-              operationWarning(warning)
+              if (typeof operationWarning === 'function') {
+                operationWarning(warning)
+              } else {
+                // Fallback to console warning if operationWarning is not available
+                console.warn('Project date adjustment warning:', warning)
+              }
             })
           }
         }
@@ -340,9 +346,10 @@ export default {
       isProcessing.value = true
 
       try {
+        const { DateCalculationService } = await import('../../services/dateCalculationService.js')
         const result = await store.dispatch('projects/adjustProjectDates', {
           projectId: props.project.id,
-          newStartDate: new Date(newStartDate.value)
+          newStartDate: DateCalculationService.parseDate(newStartDate.value)
         })
 
         if (result.success) {
@@ -351,7 +358,7 @@ export default {
             project: result.project,
             adjustedTasks: result.adjustedTasks,
             originalStartDate: props.project.startDate,
-            newStartDate: new Date(newStartDate.value)
+            newStartDate: DateCalculationService.parseDate(newStartDate.value)
           })
           handleClose()
         }

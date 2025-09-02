@@ -430,7 +430,8 @@ const actions = {
       
       // Check if new start date is a working day
       if (!DateCalculationService.isWorkingDay(newStart)) {
-        warnings.push('New start date falls on a non-working day (Sunday)')
+        const dayName = DateCalculationService.getDayName(newStart);
+        warnings.push(`New start date falls on a non-working day (${dayName})`)
       }
       
       // Check if adjustment would cause tasks to have invalid dates

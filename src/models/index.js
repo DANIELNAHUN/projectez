@@ -43,13 +43,13 @@ export class Project {
       throw new Error('New start date is required');
     }
 
-    const newStart = newStartDate instanceof Date ? newStartDate : new Date(newStartDate);
-    
+    const newStart = newStartDate instanceof Date ? newStartDate : DateCalculationService.parseDate(newStartDate);
+
     // Validate new start date
     if (isNaN(newStart.getTime())) {
       throw new Error('Invalid start date provided');
     }
-    
+
     // Validate against project end date if it exists
     if (this.endDate && !DateCalculationService.validateDateRange(newStart, this.endDate)) {
       console.warn('New start date is after project end date');
@@ -58,7 +58,7 @@ export class Project {
     // Calculate the difference in working days
     const isMovingForward = newStart >= this.startDate;
     let daysDifference;
-    
+
     try {
       if (isMovingForward) {
         daysDifference = DateCalculationService.calculateWorkingDays(this.startDate, newStart);
@@ -80,8 +80,7 @@ export class Project {
     // Adjust all task dates
     this.tasks.forEach(task => {
       try {
-        const originalStartDate = new Date(task.startDate);
-        
+
         if (isMovingForward) {
           // Moving project forward in time
           task.startDate = DateCalculationService.addWorkingDays(task.startDate, daysDifference);
@@ -89,23 +88,29 @@ export class Project {
           // Moving project backward in time
           task.startDate = DateCalculationService.subtractWorkingDays(task.startDate, daysDifference);
         }
-        
+
         // Validate the new task start date
         if (isNaN(task.startDate.getTime())) {
           throw new Error('Calculated start date is invalid');
         }
-        
+
         // Recalculate end date based on task duration
-        task.endDate = task.calculateEndDate(task.startDate, task.duration);
-        
+        // Ensure task is a Task instance or use static method
+        if (typeof task.calculateEndDate === 'function') {
+          task.endDate = task.calculateEndDate(task.startDate, task.duration);
+        } else {
+          // If task is a plain object, use DateCalculationService directly
+          task.endDate = DateCalculationService.addWorkingDays(task.startDate, task.duration);
+        }
+
         // Validate the new task end date
         if (isNaN(task.endDate.getTime())) {
           throw new Error('Calculated end date is invalid');
         }
-        
+
         task.updatedAt = new Date();
         adjustmentResults.adjustedTasks++;
-        
+
       } catch (error) {
         console.warn(`Error adjusting dates for task ${task.id}:`, error.message);
         adjustmentResults.failedTasks.push({
@@ -149,8 +154,8 @@ export class Project {
       return result;
     }
 
-    const newStart = newStartDate instanceof Date ? newStartDate : new Date(newStartDate);
-    
+    const newStart = newStartDate instanceof Date ? newStartDate : DateCalculationService.parseDate(newStartDate);
+
     if (isNaN(newStart.getTime())) {
       result.errors.push('Invalid start date provided');
       result.isValid = false;
@@ -164,13 +169,14 @@ export class Project {
 
     // Check if new start date is a working day
     if (!DateCalculationService.isWorkingDay(newStart)) {
-      result.warnings.push('New start date falls on a non-working day (Sunday)');
+      const dayName = DateCalculationService.getDayName(newStart);
+      result.warnings.push(`New start date falls on a non-working day (${dayName})`);
     }
 
     // Calculate date difference
     try {
       const isMovingForward = newStart >= this.startDate;
-      
+
       if (isMovingForward) {
         result.daysDifference = DateCalculationService.calculateWorkingDays(this.startDate, newStart);
       } else {
@@ -183,29 +189,36 @@ export class Project {
     }
 
     // Validate each task can be adjusted
-    this.tasks.forEach((task, index) => {
+    this.tasks.forEach((task) => {
       try {
         const isMovingForward = newStart >= this.startDate;
         let newTaskStartDate;
-        
+
         if (isMovingForward) {
           newTaskStartDate = DateCalculationService.addWorkingDays(task.startDate, result.daysDifference);
         } else {
           newTaskStartDate = DateCalculationService.subtractWorkingDays(task.startDate, result.daysDifference);
         }
-        
+
         if (isNaN(newTaskStartDate.getTime())) {
           result.errors.push(`Task "${task.title}" would have an invalid start date after adjustment`);
           result.isValid = false;
         }
-        
+
         // Check if task would have valid end date
-        const newTaskEndDate = task.calculateEndDate(newTaskStartDate, task.duration);
+        let newTaskEndDate;
+        if (typeof task.calculateEndDate === 'function') {
+          newTaskEndDate = task.calculateEndDate(newTaskStartDate, task.duration);
+        } else {
+          // If task is a plain object, use DateCalculationService directly
+          newTaskEndDate = DateCalculationService.addWorkingDays(newTaskStartDate, task.duration);
+        }
+
         if (isNaN(newTaskEndDate.getTime())) {
           result.errors.push(`Task "${task.title}" would have an invalid end date after adjustment`);
           result.isValid = false;
         }
-        
+
       } catch (error) {
         result.errors.push(`Error validating task "${task.title}": ${error.message}`);
         result.isValid = false;
@@ -251,6 +264,8 @@ export class Project {
       ...data,
       startDate: new Date(data.startDate),
       endDate: data.endDate ? new Date(data.endDate) : null,
+      tasks: data.tasks ? data.tasks.map(taskData => Task.fromJSON(taskData)) : [],
+      teamMembers: data.teamMembers ? data.teamMembers.map(memberData => TeamMember.fromJSON(memberData)) : [],
       createdAt: new Date(data.createdAt),
       updatedAt: new Date(data.updatedAt)
     });
@@ -300,9 +315,31 @@ export class Task {
     this.adjustStartDate = adjustStartDate;
     this.createdAt = createdAt instanceof Date ? createdAt : new Date(createdAt);
     this.updatedAt = updatedAt instanceof Date ? updatedAt : new Date(updatedAt);
+
+    // Calculate duration if not provided and validate it
+    if (duration !== null) {
+      // Validate provided duration
+      if (typeof duration !== 'number' || duration < 0 || isNaN(duration)) {
+        console.warn(`Invalid duration provided for task ${this.title}: ${duration}. Using calculated duration.`);
+        this.duration = this.calculateDuration(this.startDate, this.endDate);
+      } else if (duration > 365) {
+        console.warn(`Duration too large for task ${this.title}: ${duration} days. Limiting to 365 days.`);
+        this.duration = 365;
+      } else {
+        this.duration = duration;
+      }
+    } else {
+      this.duration = this.calculateDuration(this.startDate, this.endDate);
+    }
     
-    // Calculate duration if not provided
-    this.duration = duration !== null ? duration : this.calculateDuration(this.startDate, this.endDate);
+    // Ensure duration is within reasonable bounds
+    if (this.duration > 365) {
+      console.warn(`Calculated duration too large for task ${this.title}: ${this.duration} days. Limiting to 365 days.`);
+      this.duration = 365;
+    } else if (this.duration < 0) {
+      console.warn(`Invalid calculated duration for task ${this.title}: ${this.duration} days. Setting to 1 day.`);
+      this.duration = 1;
+    }
   }
 
   generateId() {
@@ -317,10 +354,35 @@ export class Task {
    */
   calculateDuration(startDate, endDate) {
     try {
-      return DateCalculationService.calculateWorkingDays(startDate, endDate);
+      // Validate dates before calculation
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        console.warn('Invalid dates provided for duration calculation');
+        return 1; // Default to 1 day
+      }
+      
+      if (start > end) {
+        console.warn('Start date is after end date, swapping dates');
+        return DateCalculationService.calculateWorkingDays(end, start);
+      }
+      
+      const duration = DateCalculationService.calculateWorkingDays(start, end);
+      
+      // Ensure reasonable duration
+      if (duration > 365) {
+        console.warn(`Duration too large: ${duration} days. Limiting to 365 days.`);
+        return 365;
+      } else if (duration < 0) {
+        console.warn(`Negative duration calculated: ${duration}. Setting to 1 day.`);
+        return 1;
+      }
+      
+      return duration || 1; // Ensure at least 1 day
     } catch (error) {
       console.warn('Error calculating duration:', error.message);
-      return 0;
+      return 1; // Default to 1 day on error
     }
   }
 

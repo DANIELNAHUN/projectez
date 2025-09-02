@@ -335,6 +335,7 @@ export function useNotifications() {
     // Operation shortcuts
     operationSuccess: (operation, entity) => notificationService.operationSuccess(operation, entity),
     operationError: (operation, entity, error) => notificationService.operationError(operation, entity, error),
+    operationWarning: (message) => notificationService.warning('Advertencia', message),
     
     // Validation shortcuts
     validationError: (errors, context) => notificationService.validationError(errors, context),

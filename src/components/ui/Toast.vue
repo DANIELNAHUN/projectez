@@ -38,7 +38,7 @@
             </div>
             
             <!-- Close button -->
-            <div class="ml-4 flex-shrink-0 flex">
+            <div v-if="closable" class="ml-4 flex-shrink-0 flex">
               <button
                 @click="close"
                 class="bg-white dark:bg-gray-800 rounded-md inline-flex text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
@@ -49,9 +49,11 @@
             </div>
           </div>
           
-          <!-- Action button -->
-          <div v-if="actionText && actionHandler" class="mt-3">
+          <!-- Action buttons -->
+          <div v-if="(actionText && actionHandler) || (actions && actions.length > 0)" class="mt-3 flex gap-2">
+            <!-- Legacy single action support -->
             <button
+              v-if="actionText && actionHandler"
               @click="handleAction"
               :class="[
                 'text-sm font-medium rounded-md px-3 py-2 transition-colors duration-200',
@@ -60,12 +62,25 @@
             >
               {{ actionText }}
             </button>
+            
+            <!-- Multiple actions support -->
+            <button
+              v-for="(action, index) in actions"
+              :key="index"
+              @click="handleCustomAction(action)"
+              :class="[
+                'text-sm font-medium rounded-md px-3 py-2 transition-colors duration-200',
+                getActionButtonClasses(action.style)
+              ]"
+            >
+              {{ action.label }}
+            </button>
           </div>
         </div>
         
         <!-- Progress bar -->
         <div 
-          v-if="showProgress && duration > 0"
+          v-if="showProgress && (duration > 0 || progress > 0)"
           class="h-1 bg-gray-200 dark:bg-gray-700"
         >
           <div 
@@ -74,8 +89,8 @@
               progressBarClasses
             ]"
             :style="{ 
-              width: `${progressPercentage}%`,
-              transitionDuration: `${duration}ms`
+              width: `${progress > 0 ? progress : progressPercentage}%`,
+              transitionDuration: progress > 0 ? '0ms' : `${duration}ms`
             }"
           ></div>
         </div>
@@ -128,6 +143,27 @@ const props = defineProps({
   actionHandler: {
     type: Function,
     default: null
+  },
+  // Additional props to handle notification service options
+  icon: {
+    type: String,
+    default: ''
+  },
+  actions: {
+    type: Array,
+    default: () => []
+  },
+  closable: {
+    type: Boolean,
+    default: true
+  },
+  id: {
+    type: String,
+    default: ''
+  },
+  progress: {
+    type: Number,
+    default: 0
   }
 })
 
@@ -152,6 +188,17 @@ const positionClasses = computed(() => {
 })
 
 const iconClasses = computed(() => {
+  // Use custom icon if provided, otherwise use default based on type
+  if (props.icon) {
+    const typeColors = {
+      success: 'text-green-500',
+      error: 'text-red-500',
+      warning: 'text-yellow-500',
+      info: 'text-blue-500'
+    }
+    return `${props.icon} ${typeColors[props.type] || 'text-blue-500'}`
+  }
+  
   const icons = {
     success: 'pi pi-check-circle text-green-500',
     error: 'pi pi-times-circle text-red-500',
@@ -236,6 +283,21 @@ const handleAction = () => {
   close()
 }
 
+const handleCustomAction = (action) => {
+  if (action.action) {
+    action.action()
+  }
+  emit('action', action)
+  close()
+}
+
+const getActionButtonClasses = (style) => {
+  if (style === 'danger') {
+    return 'text-red-800 bg-red-100 hover:bg-red-200 dark:text-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50'
+  }
+  return actionButtonClasses.value
+}
+
 onMounted(() => {
   // Show toast after mount
   setTimeout(() => {
@@ -253,9 +315,18 @@ onUnmounted(() => {
   }
 })
 
+const updateProgress = (newProgress, newMessage = null) => {
+  progressPercentage.value = newProgress
+  if (newMessage && props.message !== newMessage) {
+    // Note: This would require making message reactive, 
+    // but for now we'll just update the internal progress
+  }
+}
+
 // Expose methods for parent components
 defineExpose({
   show,
-  close
+  close,
+  updateProgress
 })
 </script>

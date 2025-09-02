@@ -5,7 +5,7 @@ export function initializeSampleData() {
   // Check if we already have projects
   const existingProjects = storageService.getAllProjects()
   if (existingProjects.length > 0) {
-    console.log('Sample data already exists, skipping initialization')
+    // console.log('Sample data already exists, skipping initialization')
     return
   }
 

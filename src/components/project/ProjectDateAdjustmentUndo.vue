@@ -65,7 +65,7 @@ export default {
     },
     undoData: {
       type: Object,
-      required: true
+      default: null
     },
     autoDismissTime: {
       type: Number,
@@ -91,7 +91,7 @@ export default {
 
     // Methods
     const handleUndo = async () => {
-      if (isUndoing.value) return
+      if (isUndoing.value || !props.undoData) return
 
       isUndoing.value = true
       clearTimers()

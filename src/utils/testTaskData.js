@@ -331,9 +331,10 @@ export const initializeTestData = () => {
       testProject = createTestProject()
       createTestTasks(testProject.id)
       console.log('Test project and tasks created successfully')
-    } else {
-      console.log('Test project already exists')
-    }
+    } 
+    // else {
+    //   console.log('Test project already exists')
+    // }
     
     return testProject
   } catch (error) {
