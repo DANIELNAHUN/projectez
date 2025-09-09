@@ -5,6 +5,43 @@
 
 export class ProjectExportService {
   /**
+   * Safely convert a date value to ISO string
+   * @param {Date|string|null} dateValue - Date value to convert
+   * @returns {string|null} ISO string or null
+   */
+  static safeToISOString(dateValue) {
+    if (!dateValue) return null;
+    
+    try {
+      // If it's already a Date object
+      if (dateValue instanceof Date) {
+        return dateValue.toISOString();
+      }
+      
+      // If it's a string, try to parse it
+      if (typeof dateValue === 'string') {
+        const date = new Date(dateValue);
+        if (!isNaN(date.getTime())) {
+          return date.toISOString();
+        }
+      }
+      
+      // If it's a number (timestamp)
+      if (typeof dateValue === 'number') {
+        const date = new Date(dateValue);
+        if (!isNaN(date.getTime())) {
+          return date.toISOString();
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      console.warn('Error converting date to ISO string:', dateValue, error);
+      return null;
+    }
+  }
+
+  /**
    * Export a project to JSON format with proper serialization
    * @param {Project} project - The project to export
    * @returns {string} JSON string representation of the project
@@ -26,11 +63,11 @@ export class ProjectExportService {
         id: project.id,
         name: project.name,
         description: project.description || '',
-        startDate: project.startDate ? project.startDate.toISOString() : null,
-        endDate: project.endDate ? project.endDate.toISOString() : null,
+        startDate: this.safeToISOString(project.startDate),
+        endDate: this.safeToISOString(project.endDate),
         status: project.status || 'active',
-        createdAt: project.createdAt ? project.createdAt.toISOString() : new Date().toISOString(),
-        updatedAt: project.updatedAt ? project.updatedAt.toISOString() : new Date().toISOString(),
+        createdAt: this.safeToISOString(project.createdAt) || new Date().toISOString(),
+        updatedAt: this.safeToISOString(project.updatedAt) || new Date().toISOString(),
         
         // Team members with full serialization
         teamMembers: this.serializeTeamMembers(project.teamMembers || []),
@@ -61,7 +98,7 @@ export class ProjectExportService {
       email: member.email || '',
       role: member.role || '',
       avatar: member.avatar || null,
-      joinedAt: member.joinedAt ? member.joinedAt.toISOString() : new Date().toISOString()
+      joinedAt: this.safeToISOString(member.joinedAt) || new Date().toISOString()
     }));
   }
 
@@ -77,8 +114,8 @@ export class ProjectExportService {
       parentTaskId: task.parentTaskId || null,
       title: task.title || '',
       description: task.description || '',
-      startDate: task.startDate ? task.startDate.toISOString() : null,
-      endDate: task.endDate ? task.endDate.toISOString() : null,
+      startDate: this.safeToISOString(task.startDate),
+      endDate: this.safeToISOString(task.endDate),
       status: task.status || 'pending',
       type: task.type || 'simple',
       assignedTo: task.assignedTo || null,
@@ -87,8 +124,8 @@ export class ProjectExportService {
       level: task.level || 0,
       duration: task.duration || 0,
       adjustStartDate: task.adjustStartDate || false,
-      createdAt: task.createdAt ? task.createdAt.toISOString() : new Date().toISOString(),
-      updatedAt: task.updatedAt ? task.updatedAt.toISOString() : new Date().toISOString(),
+      createdAt: this.safeToISOString(task.createdAt) || new Date().toISOString(),
+      updatedAt: this.safeToISOString(task.updatedAt) || new Date().toISOString(),
       
       // Serialize deliverable if present
       deliverable: task.deliverable ? this.serializeDeliverable(task.deliverable) : null,
@@ -107,7 +144,7 @@ export class ProjectExportService {
     return {
       type: deliverable.type || 'other',
       description: deliverable.description || '',
-      dueDate: deliverable.dueDate ? deliverable.dueDate.toISOString() : null,
+      dueDate: this.safeToISOString(deliverable.dueDate),
       status: deliverable.status || 'pending',
       notes: deliverable.notes || ''
     };
@@ -239,14 +276,20 @@ export class ProjectExportService {
     }
 
     // Check date validity
-    if (project.startDate && isNaN(project.startDate.getTime())) {
-      result.errors.push('Project start date is invalid');
-      result.isValid = false;
+    if (project.startDate) {
+      const startDate = project.startDate instanceof Date ? project.startDate : new Date(project.startDate);
+      if (isNaN(startDate.getTime())) {
+        result.errors.push('Project start date is invalid');
+        result.isValid = false;
+      }
     }
 
-    if (project.endDate && isNaN(project.endDate.getTime())) {
-      result.errors.push('Project end date is invalid');
-      result.isValid = false;
+    if (project.endDate) {
+      const endDate = project.endDate instanceof Date ? project.endDate : new Date(project.endDate);
+      if (isNaN(endDate.getTime())) {
+        result.errors.push('Project end date is invalid');
+        result.isValid = false;
+      }
     }
 
     // Validate tasks
@@ -261,14 +304,20 @@ export class ProjectExportService {
           result.warnings.push(`Task at index ${index} is missing a title`);
         }
 
-        if (task.startDate && isNaN(task.startDate.getTime())) {
-          result.errors.push(`Task "${task.title || 'Untitled'}" has invalid start date`);
-          result.isValid = false;
+        if (task.startDate) {
+          const startDate = task.startDate instanceof Date ? task.startDate : new Date(task.startDate);
+          if (isNaN(startDate.getTime())) {
+            result.errors.push(`Task "${task.title || 'Untitled'}" has invalid start date`);
+            result.isValid = false;
+          }
         }
 
-        if (task.endDate && isNaN(task.endDate.getTime())) {
-          result.errors.push(`Task "${task.title || 'Untitled'}" has invalid end date`);
-          result.isValid = false;
+        if (task.endDate) {
+          const endDate = task.endDate instanceof Date ? task.endDate : new Date(task.endDate);
+          if (isNaN(endDate.getTime())) {
+            result.errors.push(`Task "${task.title || 'Untitled'}" has invalid end date`);
+            result.isValid = false;
+          }
         }
       });
     }
