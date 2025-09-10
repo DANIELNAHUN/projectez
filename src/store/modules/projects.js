@@ -3,7 +3,6 @@ import { useErrorHandler } from '../../composables/useErrorHandler.js'
 import { useNotifications } from '../../services/notificationService.js'
 import { errorRecoveryService } from '../../services/errorRecoveryService.js'
 import { DateCalculationService } from '../../services/dateCalculationService.js'
-import { ProjectImportService } from '../../services/ProjectImportService.js'
 
 const state = {
   projects: [],
@@ -491,6 +490,8 @@ const actions = {
     commit('SET_ERROR', null)
 
     try {
+
+      const { ProjectImportService } = await import('../../services/projectImportService.js')
 
       let project
 
