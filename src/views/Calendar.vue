@@ -54,7 +54,7 @@
           <Button icon="pi pi-plus" severity="secondary" size="small" v-tooltip="'Crear nuevo proyecto'"
             @click="handleCreateProject" />
           <Button icon="pi pi-refresh" severity="secondary" size="small" v-tooltip="'Actualizar calendario'"
-            @click="loadCalendarEvents" :loading="isLoading" />
+            @click="forceRefreshCalendar" :loading="isLoading" />
         </div>
       </div>
     </div>
@@ -256,8 +256,28 @@ const navigateToToday = () => {
   store.dispatch('calendar/navigateToToday')
 }
 
-const loadCalendarEvents = () => {
-  store.dispatch('calendar/loadCalendarEvents')
+const loadCalendarEvents = async () => {
+  await store.dispatch('calendar/loadCalendarEvents')
+}
+
+const forceRefreshCalendar = async () => {
+  // Clear events first to show loading state
+  store.commit('calendar/SET_EVENTS', [])
+  await nextTick()
+  await loadCalendarEvents()
+}
+
+const debugCalendarState = () => {
+  console.log('=== Calendar Debug Info ===')
+  console.log('Current project:', currentProject.value)
+  console.log('Selected project ID:', selectedProjectId.value)
+  console.log('All projects:', allProjects.value.length)
+  console.log('All tasks:', store.getters['tasks/allTasks'].length)
+  console.log('Current view events:', currentViewEvents.value.length)
+  console.log('Calendar events:', store.getters['calendar/events'].length)
+  console.log('Is loading:', isLoading.value)
+  console.log('Error:', error.value)
+  console.log('========================')
 }
 
 const handleDateClick = (date, isEmpty = true) => {
@@ -348,27 +368,25 @@ const loadSampleData = async () => {
 // Project selector methods
 const handleProjectChange = async (event) => {
   const projectId = event.value
-  if (projectId) {
-    try {
-      if (projectId === 'all') {
-        // Clear current project to show all projects
-        await store.dispatch('projects/clearCurrentProject')
-        console.log('Mostrando tareas de todos los proyectos')
-      } else {
-        // Set the selected project as current
-        await store.dispatch('projects/setCurrentProject', projectId)
-        const project = allProjects.value.find(p => p.id === projectId)
-        if (project) {
-          console.log(`Proyecto cambiado a: ${project.name}`)
-        }
-      }
-
-      // Reload calendar events for the new selection
+  
+  try {
+    if (projectId === 'all') {
+      // Clear current project to show all projects
+      await store.dispatch('projects/clearCurrentProject')
+      // Just reload events without navigation for "all projects"
       await loadCalendarEvents()
-    } catch (error) {
-      console.error('Error changing project:', error)
-      // You could show an error toast here
+    } else {
+      // Set the selected project as current
+      await store.dispatch('projects/setCurrentProject', projectId)
+      // Use the new action that navigates to earliest task
+      await store.dispatch('calendar/onProjectChange', projectId)
     }
+    
+  } catch (error) {
+    console.error('Error changing project:', error)
+    // Reset to previous selection on error
+    const currentProj = store.getters['projects/currentProject']
+    selectedProjectId.value = currentProj ? currentProj.id : 'all'
   }
 }
 
@@ -490,33 +508,37 @@ const getProjectTasksInCurrentView = (projectId) => {
   }).length
 }
 
-// Watch for current project changes to reload events
-watch(() => store.getters['projects/currentProject'], (newProject) => {
+// Watch for current project changes to sync the selector and reload calendar
+watch(() => store.getters['projects/currentProject'], (newProject, oldProject) => {
+  // Update selector
   if (newProject) {
     selectedProjectId.value = newProject.id
   } else {
-    // If no current project, show all projects
     selectedProjectId.value = 'all'
   }
-  loadCalendarEvents()
+  
+  // Reload calendar if project actually changed
+  if (newProject?.id !== oldProject?.id) {
+    nextTick(() => {
+      loadCalendarEvents()
+    })
+  }
 }, { immediate: true })
 
 // Load initial data
 onMounted(async () => {
-  // Load projects first
-  await store.dispatch('projects/loadProjects')
+  try {
+    // Load projects first
+    await store.dispatch('projects/loadProjects')
+    
+    // Load tasks to ensure they're available
+    await store.dispatch('tasks/loadTasks')
 
-  // Set initial selected project if there's a current project
-  const current = store.getters['projects/currentProject']
-  if (current) {
-    selectedProjectId.value = current.id
-  } else if (allProjects.value.length > 0) {
-    // If no current project but projects exist, show all projects by default
-    selectedProjectId.value = 'all'
+    // Initialize calendar
+    await loadCalendarEvents()
+  } catch (error) {
+    console.error('Error initializing calendar:', error)
   }
-
-  // Initialize calendar
-  loadCalendarEvents()
 })
 </script>
 
