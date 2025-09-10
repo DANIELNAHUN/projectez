@@ -313,7 +313,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useStore } from 'vuex'
 import ResponsiveModal from './ResponsiveModal.vue'
 import LoadingSpinner from './LoadingSpinner.vue'
-import { openAIService } from '../../services/OpenAIService.js'
+import { openAIService } from '../../services/openAIService.js'
 
 const props = defineProps({
   visible: {

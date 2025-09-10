@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createStore } from 'vuex'
 import AIProjectGenerator from '../../../components/ui/AIProjectGenerator.vue'
-import { openAIService } from '../../../services/OpenAIService.js'
+import { openAIService } from '../../../services/openAIService.js'
 
 // Mock the OpenAI service
 vi.mock('../../../services/OpenAIService.js', () => ({

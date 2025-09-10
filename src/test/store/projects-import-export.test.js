@@ -28,7 +28,7 @@ vi.mock('../../services/notificationService.js', () => ({
   })
 }))
 
-vi.mock('../../services/ProjectImportService.js', () => ({
+vi.mock('../../services/projectImportService.js', () => ({
   ProjectImportService: {
     prepareProjectForImport: vi.fn(),
     importProject: vi.fn(),
@@ -77,7 +77,7 @@ describe('Projects Store - Import/Export', () => {
   describe('importProject action', () => {
     it('should successfully import project from JSON string', async () => {
       const { storageService } = await import('../../services/storageService.js')
-      const { ProjectImportService } = await import('../../services/ProjectImportService.js')
+      const { ProjectImportService } = await import('../../services/projectImportService.js')
       
       const jsonData = JSON.stringify({
         id: 'imported-project',
@@ -157,7 +157,7 @@ describe('Projects Store - Import/Export', () => {
 
     it('should handle duplicate project IDs', async () => {
       const { storageService } = await import('../../services/storageService.js')
-      const { ProjectImportService } = await import('../../services/ProjectImportService.js')
+      const { ProjectImportService } = await import('../../services/projectImportService.js')
       
       const projectData = {
         id: 'project-1', // Same as existing project

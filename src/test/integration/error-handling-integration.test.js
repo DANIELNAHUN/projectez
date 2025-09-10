@@ -13,19 +13,19 @@ import ProjectImportExport from '../../components/ui/ProjectImportExport.vue'
 import ErrorBoundary from '../../components/ui/ErrorBoundary.vue'
 import ProgressIndicator from '../../components/ui/ProgressIndicator.vue'
 
-import { openAIService } from '../../services/OpenAIService.js'
-import { ProjectImportService } from '../../services/ProjectImportService.js'
-import { ProjectExportService } from '../../services/ProjectExportService.js'
-import { DateCalculationService } from '../../services/DateCalculationService.js'
+import { openAIService } from '../../services/openAIService.js'
+import { ProjectImportService } from '../../services/projectImportService.js'
+import { ProjectExportService } from '../../services/projectExportService.js'
+import { DateCalculationService } from '../../services/dateCalculationService.js'
 
 import { useErrorHandler } from '../../composables/useErrorHandler.js'
 import { useRetry } from '../../composables/useRetry.js'
 import { useNotifications } from '../../services/notificationService.js'
 
 // Mock external dependencies
-vi.mock('../../services/OpenAIService.js')
-vi.mock('../../services/ProjectImportService.js')
-vi.mock('../../services/ProjectExportService.js')
+vi.mock('../../services/openAIService.js')
+vi.mock('../../services/projectImportService.js')
+vi.mock('../../services/projectExportService.js')
 
 describe('Error Handling Integration Tests', () => {
   let store

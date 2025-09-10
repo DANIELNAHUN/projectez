@@ -389,8 +389,8 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useStore } from 'vuex'
 import ResponsiveModal from './ResponsiveModal.vue'
 import LoadingSpinner from './LoadingSpinner.vue'
-import { ProjectExportService } from '../../services/ProjectExportService.js'
-import { ProjectImportService } from '../../services/ProjectImportService.js'
+import { ProjectExportService } from '../../services/projectExportService.js'
+import { ProjectImportService } from '../../services/projectImportService.js'
 
 const props = defineProps({
   visible: {

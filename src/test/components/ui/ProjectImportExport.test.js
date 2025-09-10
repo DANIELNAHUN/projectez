@@ -2,12 +2,12 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createStore } from 'vuex'
 import ProjectImportExport from '../../../components/ui/ProjectImportExport.vue'
-import { ProjectExportService } from '../../../services/ProjectExportService.js'
-import { ProjectImportService } from '../../../services/ProjectImportService.js'
+import { ProjectExportService } from '../../../services/projectExportService.js'
+import { ProjectImportService } from '../../../services/projectImportService.js'
 
 // Mock the services
-vi.mock('../../../services/ProjectExportService.js')
-vi.mock('../../../services/ProjectImportService.js')
+vi.mock('../../../services/projectExportService.js')
+vi.mock('../../../services/projectImportService.js')
 
 // Mock child components
 vi.mock('../../../components/ui/ResponsiveModal.vue', () => ({
