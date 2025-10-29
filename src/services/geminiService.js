@@ -1,35 +1,33 @@
 /**
- * OpenAIService - Handles AI project generation using OpenAI API
+ * GeminiService - Handles AI project generation using Google Gemini API
  * Provides methods to generate complete projects from user prompts
  */
 
-import OpenAI from 'openai';
-import { Project, Task, TeamMember, Deliverable } from '../models/index.js';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { getProviderConfig, getErrorConfig } from '../config/aiConfig.js';
 
-export class OpenAIService {
+export class GeminiService {
   constructor() {
     this.client = null;
+    this.model = null;
     this.isConfigured = false;
   }
 
   /**
-   * Configure OpenAI client with API key
-   * @param {string} apiKey - OpenAI API key
+   * Configure Gemini client with API key
+   * @param {string} apiKey - Gemini API key
    */
   configure(apiKey) {
     if (!apiKey || typeof apiKey !== 'string') {
-      throw new Error('Valid OpenAI API key is required');
+      throw new Error('Valid Gemini API key is required');
     }
 
     try {
-      this.client = new OpenAI({
-        apiKey: apiKey,
-        dangerouslyAllowBrowser: true // Note: In production, API calls should go through a backend
-      });
+      this.client = new GoogleGenerativeAI(apiKey);
+      this.model = this.client.getGenerativeModel({ model: 'gemini-pro' });
       this.isConfigured = true;
     } catch (error) {
-      throw new Error(`Failed to configure OpenAI client: ${error.message}`);
+      throw new Error(`Failed to configure Gemini client: ${error.message}`);
     }
   }
 
@@ -38,7 +36,7 @@ export class OpenAIService {
    * @returns {boolean} Configuration status
    */
   isReady() {
-    return this.isConfigured && this.client !== null;
+    return this.isConfigured && this.client !== null && this.model !== null;
   }
 
   /**
@@ -49,7 +47,7 @@ export class OpenAIService {
    */
   async generateProject(prompt, options = {}) {
     if (!this.isReady()) {
-      throw new Error('OpenAI service is not configured. Please provide an API key.');
+      throw new Error('Gemini service is not configured. Please provide an API key.');
     }
 
     if (!prompt || typeof prompt !== 'string' || prompt.trim() === '') {
@@ -66,45 +64,35 @@ export class OpenAIService {
     try {
       const systemPrompt = this.createSystemPrompt(complexity, includeTeamMembers, maxTasks);
       const userPrompt = this.enhanceUserPrompt(prompt, estimatedDuration);
-
-      // Get configuration for this complexity level
-      const config = getProviderConfig('openai', complexity);
       
-      const response = await this.client.chat.completions.create({
-        model: config.model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        temperature: config.temperature,
-        max_tokens: config.maxTokens,
-        response_format: config.responseFormat
-      });
+      const fullPrompt = `${systemPrompt}\n\nUser Request: ${userPrompt}`;
 
-      if (!response.choices || response.choices.length === 0) {
-        throw new Error('No response received from OpenAI');
+      const result = await this.model.generateContent(fullPrompt);
+      const response = await result.response;
+      const text = response.text();
+
+      if (!text) {
+        throw new Error('No response received from Gemini');
       }
 
-      const aiResponse = response.choices[0].message.content;
-      return this.processAIResponse(aiResponse);
+      return this.processAIResponse(text);
 
     } catch (error) {
-      if (error.code === 'insufficient_quota') {
-        throw new Error('OpenAI API quota exceeded. Please check your billing settings.');
-      } else if (error.code === 'invalid_api_key') {
-        throw new Error('Invalid OpenAI API key. Please check your configuration.');
-      } else if (error.code === 'rate_limit_exceeded') {
-        throw new Error('OpenAI API rate limit exceeded. Please try again later.');
+      if (error.message?.includes('API_KEY_INVALID')) {
+        throw new Error('Invalid Gemini API key. Please check your configuration.');
+      } else if (error.message?.includes('QUOTA_EXCEEDED')) {
+        throw new Error('Gemini API quota exceeded. Please check your billing settings.');
+      } else if (error.message?.includes('RATE_LIMIT_EXCEEDED')) {
+        throw new Error('Gemini API rate limit exceeded. Please try again later.');
       } else if (error.message?.includes('Failed to parse AI response as JSON')) {
         // Enhanced JSON parsing error with debugging info
-        throw new Error(`OpenAI returned invalid JSON: ${error.message}. Try reducing project complexity or using a simpler description.`);
+        throw new Error(`Gemini returned invalid JSON: ${error.message}. Try reducing project complexity or using a simpler description.`);
       } else {
-        throw new Error(`OpenAI API error: ${error.message}`);
+        throw new Error(`Gemini API error: ${error.message}`);
       }
     }
-  }
+  }  /**
 
-  /**
    * Create system prompt for project generation
    * @param {string} complexity - Project complexity level
    * @param {boolean} includeTeamMembers - Whether to include team members
@@ -117,9 +105,10 @@ export class OpenAIService {
 CRITICAL INSTRUCTIONS:
 1. You MUST respond with ONLY valid, complete JSON
 2. Do NOT include any explanations, comments, or text outside the JSON
-3. Ensure the JSON is properly closed with all braces and brackets
-4. Keep descriptions concise to avoid token limits
-5. Maximum ${maxTasks} main tasks
+3. Start your response with { and end with }
+4. Ensure the JSON is properly closed with all braces and brackets
+5. Keep descriptions concise to avoid token limits
+6. Maximum ${maxTasks} main tasks
 
 Generate a project with the following structure:
 {
@@ -199,7 +188,7 @@ Guidelines:
    */
   enhanceUserPrompt(prompt, estimatedDuration = null) {
     let enhancedPrompt = `Create a project for: ${prompt}`;
-
+    
     if (estimatedDuration) {
       enhancedPrompt += `\n\nEstimated total duration: ${estimatedDuration} working days`;
     }
@@ -227,7 +216,7 @@ Guidelines:
       projectData = JSON.parse(cleanedResponse);
     } catch (error) {
       // Log debugging information
-      console.error('OpenAI JSON Parse Error:', {
+      console.error('Gemini JSON Parse Error:', {
         originalLength: response.length,
         cleanedLength: cleanedResponse.length,
         errorMessage: error.message,
@@ -346,9 +335,8 @@ Guidelines:
       // If we can't fix it, return null
       return null;
     }
-  }
-
-  /**
+  } 
+ /**
    * Validate generated project structure
    * @param {Object} projectData - Generated project data
    * @returns {Object} Validation result
@@ -469,7 +457,7 @@ Guidelines:
       if (task.type !== 'with_deliverable') {
         result.warnings.push(`Task at index ${index} has deliverable but type is not "with_deliverable"`);
       }
-
+      
       const validDeliverableTypes = ['presentation', 'file', 'exposition', 'other'];
       if (!task.deliverable.type || !validDeliverableTypes.includes(task.deliverable.type)) {
         result.warnings.push(`Task at index ${index} deliverable has invalid type`);
@@ -489,17 +477,16 @@ Guidelines:
     }
 
     return result;
-  }
-
-  /**
-   * Enhance project data with additional metadata and IDs
+  }  /**
+  
+ * Enhance project data with additional metadata and IDs
    * @param {Object} projectData - Raw project data from AI
    * @returns {Object} Enhanced project data
    */
   enhanceProjectData(projectData) {
     // Generate unique project ID
-    const projectId = 'ai_project_' + Date.now() + '_' + Math.random().toString(36).substring(2, 11);
-
+    const projectId = 'gemini_project_' + Date.now() + '_' + Math.random().toString(36).substring(2, 11);
+    
     // Enhance project data
     const enhancedProject = {
       id: projectId,
@@ -546,7 +533,7 @@ Guidelines:
 
     tasks.forEach(task => {
       const taskId = 'task_' + Date.now() + '_' + Math.random().toString(36).substring(2, 11);
-
+      
       const enhancedTask = {
         id: taskId,
         projectId: projectId,
@@ -579,9 +566,9 @@ Guidelines:
       // Process subtasks recursively
       if (task.subtasks && Array.isArray(task.subtasks)) {
         enhancedTask.subtasks = this.enhanceTasksData(
-          task.subtasks,
-          projectId,
-          taskId,
+          task.subtasks, 
+          projectId, 
+          taskId, 
           level + 1
         );
       }
@@ -612,24 +599,24 @@ Guidelines:
     const maxRetries = options.maxRetries || 3;
     const baseDelay = options.baseDelay || 1000;
     const startTime = Date.now();
-
+    
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       const attemptStartTime = Date.now();
-
+      
       try {
         result.project = await this.generateProject(prompt, options);
         result.success = true;
         result.retryCount = attempt;
         result.totalTime = Date.now() - startTime;
-
+        
         // Log successful generation
         if (attempt > 0) {
-          console.log(`OpenAI project generation succeeded after ${attempt} retries`, {
+          console.log(`Gemini project generation succeeded after ${attempt} retries`, {
             totalTime: result.totalTime,
             retryHistory: result.retryHistory
           });
         }
-
+        
         break;
       } catch (error) {
         const attemptTime = Date.now() - attemptStartTime;
@@ -640,36 +627,36 @@ Guidelines:
           time: attemptTime,
           timestamp: new Date().toISOString()
         };
-
+        
         result.errors.push(`Intento ${attempt + 1}: ${error.message}`);
         result.retryHistory.push(errorInfo);
-
+        
         // Determine if we should retry based on error type
         const shouldRetry = this.shouldRetryError(error);
-
+        
         if (!shouldRetry || attempt >= maxRetries) {
           result.totalTime = Date.now() - startTime;
-
+          
           // Add specific error guidance
-          if (error.code === 'insufficient_quota') {
-            result.errors.push('Sugerencia: Verifica tu configuración de facturación en OpenAI');
-          } else if (error.code === 'invalid_api_key') {
-            result.errors.push('Sugerencia: Verifica que tu clave API sea válida y tenga permisos');
-          } else if (error.code === 'rate_limit_exceeded') {
+          if (error.message?.includes('API_KEY_INVALID')) {
+            result.errors.push('Sugerencia: Verifica que tu clave API de Gemini sea válida');
+          } else if (error.message?.includes('QUOTA_EXCEEDED')) {
+            result.errors.push('Sugerencia: Verifica tu configuración de facturación en Google Cloud');
+          } else if (error.message?.includes('RATE_LIMIT_EXCEEDED')) {
             result.errors.push('Sugerencia: Espera unos minutos antes de intentar nuevamente');
           }
-
+          
           break;
         }
-
+        
         // Calculate delay with exponential backoff and jitter
         const delay = Math.min(
           baseDelay * Math.pow(2, attempt) * (0.5 + Math.random() * 0.5),
           10000 // Max 10 seconds
         );
-
-        console.log(`OpenAI generation failed, retrying in ${delay}ms`, errorInfo);
-
+        
+        console.log(`Gemini generation failed, retrying in ${delay}ms`, errorInfo);
+        
         // Wait before retry
         if (attempt < maxRetries) {
           await new Promise(resolve => setTimeout(resolve, delay));
@@ -686,56 +673,53 @@ Guidelines:
    * @returns {boolean} Whether the error should be retried
    */
   shouldRetryError(error) {
-    const errorConfig = getErrorConfig('openai');
+    const errorConfig = getErrorConfig('gemini');
     
     // Don't retry on permanent failures
-    if (errorConfig.permanent.includes(error.code)) {
+    const message = error.message?.toUpperCase() || '';
+    if (errorConfig.permanent.some(code => message.includes(code))) {
       return false;
     }
-
+    
     // Don't retry on validation errors
-    if (error.message?.includes('validation') || error.message?.includes('invalid')) {
+    if (message.includes('VALIDATION') || message.includes('INVALID')) {
       return false;
     }
-
+    
     // Retry on configured retryable errors
-    if (errorConfig.retryable.includes(error.code)) {
+    if (errorConfig.retryable.some(code => message.includes(code))) {
       return true;
     }
-
+    
     // Retry on network-related errors
-    const message = error.message?.toLowerCase() || '';
-    return message.includes('network') ||
-      message.includes('timeout') ||
-      message.includes('fetch') ||
-      message.includes('connection');
+    return message.includes('NETWORK') || 
+           message.includes('TIMEOUT') || 
+           message.includes('FETCH') ||
+           message.includes('CONNECTION');
   }
 
   /**
-   * Test the OpenAI connection and configuration
+   * Test the Gemini connection and configuration
    * @returns {Promise<Object>} Test result
    */
   async testConnection() {
     if (!this.isReady()) {
       return {
         success: false,
-        error: 'OpenAI service is not configured'
+        error: 'Gemini service is not configured'
       };
     }
 
     try {
-      const response = await this.client.chat.completions.create({
-        model: 'gpt-3.5-turbo',
-        messages: [
-          { role: 'user', content: 'Hello, this is a connection test. Please respond with "Connection successful".' }
-        ],
-        max_tokens: 10
-      });
+      const result = await this.model.generateContent('Hello, this is a connection test. Please respond with "Connection successful".');
+      const response = await result.response;
+      const text = response.text();
 
       return {
         success: true,
-        message: 'OpenAI connection successful',
-        model: 'gpt-3.5-turbo'
+        message: 'Gemini connection successful',
+        model: 'gemini-pro',
+        response: text
       };
     } catch (error) {
       return {
@@ -747,4 +731,4 @@ Guidelines:
 }
 
 // Export singleton instance
-export const openAIService = new OpenAIService();
+export const geminiService = new GeminiService();
