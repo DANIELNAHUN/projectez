@@ -182,14 +182,34 @@ const actions = {
       // Import Project class
       const { Project } = await import('../../models/index.js')
 
-      // Create a new Project instance with updated data
+      // CRITICAL FIX: Get existing project data to preserve tasks and other data
+      const existingProject = storageService.getProject(projectData.id)
+      if (!existingProject) {
+        throw new Error(`Project with ID ${projectData.id} not found`)
+      }
+
+      // Create a new Project instance with updated data, preserving existing tasks and team members
       const updatedProject = new Project({
-        ...projectData,
+        ...existingProject, // Start with existing data
+        ...projectData,     // Override with new data from form
+        tasks: existingProject.tasks || [], // Preserve existing tasks
+        teamMembers: existingProject.teamMembers || [], // Preserve existing team members
         updatedAt: new Date()
       })
 
       await storageService.saveProject(updatedProject)
       commit('UPDATE_PROJECT', updatedProject)
+
+      // Synchronize tasks if this is the current project
+      if (updatedProject.tasks && this.state.tasks) {
+        // Import Task class to ensure proper task instances
+        const { Task } = await import('../../models/index.js')
+        const taskInstances = updatedProject.tasks.map(taskData =>
+          taskData instanceof Task ? taskData : Task.fromJSON(taskData)
+        )
+        this.commit('tasks/SET_TASKS', taskInstances)
+      }
+
       return updatedProject
     } catch (error) {
       commit('SET_ERROR', error.message)
@@ -221,6 +241,15 @@ const actions = {
     try {
       const project = storageService.getProject(projectId)
       commit('SET_CURRENT_PROJECT', project)
+
+      // Ensure tasks store is synchronized with the current project's tasks
+      if (project && project.tasks && this.state.tasks) {
+        // Import Task class to convert plain objects to Task instances
+        const { Task } = await import('../../models/index.js')
+        const taskInstances = project.tasks.map(taskData => Task.fromJSON(taskData))
+        this.commit('tasks/SET_TASKS', taskInstances)
+      }
+
       return project
     } catch (error) {
       commit('SET_ERROR', error.message)
@@ -352,6 +381,17 @@ const actions = {
 
         // Update store state
         commit('UPDATE_PROJECT', project)
+
+        // CRITICAL FIX: Update tasks in the tasks store to keep them synchronized
+        // This ensures that when project dates are adjusted, the tasks store reflects the changes
+        if (this.state.tasks && project.tasks) {
+          // Import Task class to ensure proper task instances
+          const { Task } = await import('../../models/index.js')
+          const taskInstances = project.tasks.map(taskData =>
+            taskData instanceof Task ? taskData : Task.fromJSON(taskData)
+          )
+          this.commit('tasks/SET_TASKS', taskInstances)
+        }
 
         const { operationSuccess } = useNotifications()
         operationSuccess('update', 'Fechas del proyecto')
@@ -813,6 +853,23 @@ const actions = {
 
   clearCurrentProject({ commit }) {
     commit('SET_CURRENT_PROJECT', null)
+  },
+
+  // New action to synchronize tasks after project updates
+  async synchronizeProjectTasks({ commit }, projectId) {
+    try {
+      const project = storageService.getProject(projectId)
+      if (project && project.tasks && this.state.tasks) {
+        // Import Task class to ensure proper task instances
+        const { Task } = await import('../../models/index.js')
+        const taskInstances = project.tasks.map(taskData => Task.fromJSON(taskData))
+        this.commit('tasks/SET_TASKS', taskInstances)
+      }
+      return true
+    } catch (error) {
+      console.error('Error synchronizing project tasks:', error)
+      return false
+    }
   }
 }
 
