@@ -186,14 +186,15 @@
           <!-- Input Area -->
           <div class="border-t border-gray-200 dark:border-gray-700 p-4">
             <div class="flex space-x-3">
-              <input
+                <textarea
                 v-model="currentPrompt"
-                type="text"
                 placeholder="Describe tu proyecto (ej: 'Crear una aplicación web de e-commerce con carrito de compras')"
                 class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
                 @keyup.enter="generateProject"
                 :disabled="isGenerating"
-              />
+              >
+
+              </textarea>
               <button
                 @click="generateProject"
                 :disabled="!currentPrompt.trim() || isGenerating"
@@ -418,7 +419,7 @@ const apiKey = ref('')
 const selectedProvider = ref('openai')
 const currentProvider = ref('openai')
 const currentPrompt = ref('')
-const selectedComplexity = ref('medium')
+const selectedComplexity = ref('detailed')
 const messages = ref([])
 const generatedProject = ref(null)
 const importStartDate = ref('')

@@ -554,14 +554,19 @@ const actions = {
           projectId = ProjectImportService.generateUniqueProjectId(projectId, existingIds)
         }
 
-        // Helper function to process tasks recursively
-        const processTasks = async (tasksData, projectId, currentDate, parentTaskId = null) => {
+        // Helper function to process tasks recursively with enhanced hierarchy support
+        const processTasks = async (tasksData, projectId, currentDate, parentTaskId = null, level = 0) => {
           const { Task } = await import('../../models/index.js')
           const processedTasks = []
           let workingDate = new Date(currentDate)
 
-          for (const taskData of tasksData) {
+          for (let index = 0; index < tasksData.length; index++) {
+            const taskData = tasksData[index]
+            
             try {
+              // Generate unique task ID if not provided
+              const taskId = taskData.id || `task_l${level}_${index}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`
+
               // Initialize dates if they don't exist
               let startDate = taskData.startDate ? new Date(taskData.startDate) : new Date(workingDate)
               let endDate = taskData.endDate ? new Date(taskData.endDate) : null
@@ -584,26 +589,53 @@ const actions = {
 
               // Process subtasks if they exist
               let subtasks = []
+              let aggregatedDuration = duration
+              
               if (taskData.subtasks && Array.isArray(taskData.subtasks) && taskData.subtasks.length > 0) {
-                const taskId = taskData.id || `task_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
-                subtasks = await processTasks(taskData.subtasks, projectId, startDate, taskId)
+                subtasks = await processTasks(taskData.subtasks, projectId, startDate, taskId, level + 1)
+                
+                // Calculate aggregated duration from subtasks
+                if (subtasks.length > 0) {
+                  const subtaskDurationSum = subtasks.reduce((sum, subtask) => {
+                    return sum + (subtask.aggregatedDuration || subtask.duration || 0)
+                  }, 0)
+                  
+                  // Always use subtask sum for aggregated duration when subtasks exist
+                  aggregatedDuration = subtaskDurationSum
+                  // Recalculate parent end date based on aggregated duration
+                  endDate = DateCalculationService.addWorkingDays(startDate, aggregatedDuration)
+                }
+                
+                // Add all subtasks to the processed tasks array (flatten hierarchy)
+                processedTasks.push(...subtasks)
               }
 
+              // Create task with enhanced hierarchy metadata
               const task = new Task({
                 ...taskData,
+                id: taskId,
                 startDate,
                 endDate,
                 duration,
                 projectId: projectId,
                 parentTaskId: parentTaskId,
-                subtasks,
+                subtasks: [], // Don't store nested subtasks in the task object for flat storage
+                level: level,
                 createdAt: new Date(),
                 updatedAt: new Date()
               })
 
+              // Add enhanced hierarchy metadata as custom properties
+              task.isMainTask = level === 0
+              task.hasSubtasks = Boolean(taskData.subtasks && taskData.subtasks.length > 0)
+              task.aggregatedDuration = aggregatedDuration
+              task.originalOrder = index
+              task.moduleType = taskData.moduleType || null
+
               processedTasks.push(task)
 
               // Move current date forward for next task (sequential scheduling)
+              // Use aggregated duration for proper spacing
               workingDate = new Date(endDate)
               workingDate.setDate(workingDate.getDate() + 1) // Add 1 day gap between tasks
 
@@ -620,7 +652,42 @@ const actions = {
         let processedTasks = []
         if (projectData.tasks && Array.isArray(projectData.tasks)) {
           const projectStartDate = projectData.startDate ? new Date(projectData.startDate) : new Date()
-          processedTasks = await processTasks(projectData.tasks, projectId, projectStartDate)
+          processedTasks = await processTasks(projectData.tasks, projectId, projectStartDate, null, 0)
+        }
+
+        // Validate hierarchy integrity before creating project
+        if (processedTasks.length > 0) {
+          try {
+            const { HierarchyValidator } = await import('../../utils/hierarchyValidator.js')
+            const hierarchyValidator = new HierarchyValidator()
+            
+            // Build hierarchy data for validation
+            const hierarchyData = {
+              tasks: processedTasks.filter(task => task.level === 0), // Only main tasks for top-level validation
+              relationships: new Map(),
+              taskCount: processedTasks.length,
+              maxDepth: Math.max(...processedTasks.map(task => task.level))
+            }
+            
+            // Build relationships map
+            processedTasks.forEach(task => {
+              if (task.parentTaskId) {
+                hierarchyData.relationships.set(task.id, task.parentTaskId)
+              }
+            })
+            
+            const validation = hierarchyValidator.validateHierarchy(hierarchyData)
+            if (!validation.isValid) {
+              console.warn('Hierarchy validation warnings:', validation.warnings)
+              // Log errors but don't fail import for minor issues
+              if (validation.errors.length > 0) {
+                console.warn('Hierarchy validation errors:', validation.errors)
+              }
+            }
+          } catch (validationError) {
+            console.warn('Error validating hierarchy during import:', validationError.message)
+            // Continue with import even if validation fails
+          }
         }
 
         project = new Project({
@@ -631,11 +698,14 @@ const actions = {
           updatedAt: new Date()
         })
 
-        // Update project end date based on last task
+        // Update project end date based on last main task or task with latest end date
         if (processedTasks.length > 0) {
-          const lastTask = processedTasks[processedTasks.length - 1]
-          if (lastTask.endDate) {
-            project.endDate = new Date(lastTask.endDate)
+          const latestEndDate = processedTasks.reduce((latest, task) => {
+            return task.endDate > latest ? task.endDate : latest
+          }, processedTasks[0].endDate)
+          
+          if (latestEndDate) {
+            project.endDate = new Date(latestEndDate)
           }
         }
 
@@ -855,14 +925,56 @@ const actions = {
     commit('SET_CURRENT_PROJECT', null)
   },
 
-  // New action to synchronize tasks after project updates
+  // New action to synchronize tasks after project updates with hierarchy preservation
   async synchronizeProjectTasks({ commit }, projectId) {
     try {
       const project = storageService.getProject(projectId)
       if (project && project.tasks && this.state.tasks) {
         // Import Task class to ensure proper task instances
         const { Task } = await import('../../models/index.js')
-        const taskInstances = project.tasks.map(taskData => Task.fromJSON(taskData))
+        
+        // Convert tasks to Task instances while preserving hierarchy
+        const taskInstances = project.tasks.map(taskData => {
+          const task = Task.fromJSON(taskData)
+          
+          // Ensure hierarchy metadata is preserved
+          if (taskData.isMainTask !== undefined) task.isMainTask = taskData.isMainTask
+          if (taskData.hasSubtasks !== undefined) task.hasSubtasks = taskData.hasSubtasks
+          if (taskData.aggregatedDuration !== undefined) task.aggregatedDuration = taskData.aggregatedDuration
+          if (taskData.originalOrder !== undefined) task.originalOrder = taskData.originalOrder
+          if (taskData.moduleType !== undefined) task.moduleType = taskData.moduleType
+          
+          return task
+        })
+        
+        // Validate hierarchy integrity during synchronization
+        try {
+          const { HierarchyValidator } = await import('../../utils/hierarchyValidator.js')
+          const hierarchyValidator = new HierarchyValidator()
+          
+          // Build hierarchy data for validation
+          const hierarchyData = {
+            tasks: taskInstances.filter(task => task.level === 0),
+            relationships: new Map(),
+            taskCount: taskInstances.length,
+            maxDepth: Math.max(...taskInstances.map(task => task.level || 0))
+          }
+          
+          // Build relationships map
+          taskInstances.forEach(task => {
+            if (task.parentTaskId) {
+              hierarchyData.relationships.set(task.id, task.parentTaskId)
+            }
+          })
+          
+          const validation = hierarchyValidator.validateHierarchy(hierarchyData)
+          if (!validation.isValid) {
+            console.warn('Hierarchy validation issues during synchronization:', validation.errors)
+          }
+        } catch (validationError) {
+          console.warn('Error validating hierarchy during synchronization:', validationError.message)
+        }
+        
         this.commit('tasks/SET_TASKS', taskInstances)
       }
       return true

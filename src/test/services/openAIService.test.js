@@ -64,7 +64,7 @@ describe('OpenAIService', () => {
       const prompt = service.createSystemPrompt();
       
       expect(prompt).toContain('You are an expert project manager');
-      expect(prompt).toContain('valid JSON only');
+      expect(prompt).toContain('ONLY valid, complete JSON');
       expect(prompt).toContain('Complexity level: medium');
       expect(prompt).toContain('Maximum tasks: 20');
       expect(prompt).toContain('teamMembers');
@@ -430,6 +430,241 @@ describe('OpenAIService', () => {
       expect(enhanced[0].subtasks).toHaveLength(1);
       expect(enhanced[0].subtasks[0].level).toBe(1);
       expect(enhanced[0].subtasks[0].parentTaskId).toBe(enhanced[0].id);
+    });
+
+    it('should create hierarchical tasks with proper metadata', () => {
+      const tasksData = [{
+        title: 'INTRANET Module',
+        description: 'Main intranet module',
+        duration: 20,
+        subtasks: [{
+          title: 'User Authentication',
+          description: 'Login system',
+          duration: 8
+        }, {
+          title: 'Dashboard',
+          description: 'Main dashboard',
+          duration: 12
+        }]
+      }, {
+        title: 'COMERCIAL Module',
+        description: 'Sales module',
+        duration: 15
+      }];
+
+      const analysisResult = {
+        isHierarchical: true,
+        modules: [
+          { name: 'INTRANET', keywords: ['intranet', 'internal'] },
+          { name: 'COMERCIAL', keywords: ['comercial', 'sales'] }
+        ],
+        complexity: 'high'
+      };
+
+      const enhanced = service.enhanceTasksData(tasksData, 'project_123', null, 0, analysisResult);
+
+      // Test main task properties
+      expect(enhanced).toHaveLength(2);
+      expect(enhanced[0].isMainTask).toBe(true);
+      expect(enhanced[0].hasSubtasks).toBe(true);
+      expect(enhanced[0].moduleType).toBe('INTRANET');
+      expect(enhanced[0].originalOrder).toBe(0);
+      expect(enhanced[0].level).toBe(0);
+      expect(enhanced[0].complexityLevel).toBe('high');
+      expect(enhanced[0].estimatedSubtasks).toBe(2);
+
+      expect(enhanced[1].isMainTask).toBe(true);
+      expect(enhanced[1].hasSubtasks).toBe(false);
+      expect(enhanced[1].moduleType).toBe('COMERCIAL');
+      expect(enhanced[1].originalOrder).toBe(3);
+
+      // Test subtask properties
+      expect(enhanced[0].subtasks).toHaveLength(2);
+      expect(enhanced[0].subtasks[0].isMainTask).toBe(false);
+      expect(enhanced[0].subtasks[0].hasSubtasks).toBe(false);
+      expect(enhanced[0].subtasks[0].level).toBe(1);
+      expect(enhanced[0].subtasks[0].parentTaskId).toBe(enhanced[0].id);
+      expect(enhanced[0].subtasks[0].originalOrder).toBe(1);
+    });
+
+    it('should validate parent-child relationship assignment', () => {
+      const tasksData = [{
+        title: 'Main Task',
+        description: 'Top level task',
+        duration: 30,
+        subtasks: [{
+          title: 'Subtask 1',
+          description: 'First subtask',
+          duration: 10,
+          subtasks: [{
+            title: 'Sub-subtask 1',
+            description: 'Nested subtask',
+            duration: 5
+          }]
+        }, {
+          title: 'Subtask 2',
+          description: 'Second subtask',
+          duration: 15
+        }]
+      }];
+
+      const analysisResult = { isHierarchical: true };
+      const enhanced = service.enhanceTasksData(tasksData, 'project_123', null, 0, analysisResult);
+
+      // Verify main task
+      expect(enhanced[0].parentTaskId).toBeNull();
+      expect(enhanced[0].level).toBe(0);
+      expect(enhanced[0].isMainTask).toBe(true);
+
+      // Verify first subtask
+      const subtask1 = enhanced[0].subtasks[0];
+      expect(subtask1.parentTaskId).toBe(enhanced[0].id);
+      expect(subtask1.level).toBe(1);
+      expect(subtask1.isMainTask).toBe(false);
+
+      // Verify sub-subtask
+      const subSubtask = subtask1.subtasks[0];
+      expect(subSubtask.parentTaskId).toBe(subtask1.id);
+      expect(subSubtask.level).toBe(2);
+      expect(subSubtask.isMainTask).toBe(false);
+
+      // Verify second subtask
+      const subtask2 = enhanced[0].subtasks[1];
+      expect(subtask2.parentTaskId).toBe(enhanced[0].id);
+      expect(subtask2.level).toBe(1);
+      expect(subtask2.isMainTask).toBe(false);
+    });
+
+    it('should calculate duration aggregation correctly', () => {
+      const tasksData = [{
+        title: 'Parent Task',
+        description: 'Task with subtasks',
+        duration: 5, // This should be overridden by subtask sum
+        subtasks: [{
+          title: 'Subtask 1',
+          description: 'First subtask',
+          duration: 8
+        }, {
+          title: 'Subtask 2',
+          description: 'Second subtask',
+          duration: 12
+        }]
+      }, {
+        title: 'Simple Task',
+        description: 'Task without subtasks',
+        duration: 10
+      }];
+
+      const analysisResult = { isHierarchical: true };
+      const enhanced = service.enhanceTasksData(tasksData, 'project_123', null, 0, analysisResult);
+
+      // Parent task should have aggregated duration from subtasks
+      expect(enhanced[0].aggregatedDuration).toBe(20); // 8 + 12
+      expect(enhanced[0].duration).toBe(5); // Original duration preserved
+
+      // Simple task should keep its own duration
+      expect(enhanced[1].aggregatedDuration).toBe(10);
+      expect(enhanced[1].duration).toBe(10);
+
+      // Subtasks should have their own durations as aggregated durations
+      expect(enhanced[0].subtasks[0].aggregatedDuration).toBe(8);
+      expect(enhanced[0].subtasks[1].aggregatedDuration).toBe(12);
+    });
+
+    it('should handle nested duration aggregation', () => {
+      const tasksData = [{
+        title: 'Main Task',
+        description: 'Multi-level task',
+        duration: 100,
+        subtasks: [{
+          title: 'Subtask with children',
+          description: 'Has its own subtasks',
+          duration: 20,
+          subtasks: [{
+            title: 'Sub-subtask 1',
+            duration: 6
+          }, {
+            title: 'Sub-subtask 2',
+            duration: 9
+          }]
+        }, {
+          title: 'Simple subtask',
+          description: 'No children',
+          duration: 25
+        }]
+      }];
+
+      const analysisResult = { isHierarchical: true };
+      const enhanced = service.enhanceTasksData(tasksData, 'project_123', null, 0, analysisResult);
+
+      // Main task should aggregate from all subtasks (including nested)
+      expect(enhanced[0].aggregatedDuration).toBe(40); // (6+9) + 25 = 40
+
+      // Subtask with children should aggregate from its children
+      expect(enhanced[0].subtasks[0].aggregatedDuration).toBe(15); // 6 + 9
+
+      // Simple subtask should keep its own duration
+      expect(enhanced[0].subtasks[1].aggregatedDuration).toBe(25);
+    });
+
+    it('should preserve user-specified task names and descriptions', () => {
+      const tasksData = [{
+        title: 'Módulo de Gestión de Usuarios',
+        description: 'Sistema completo de gestión de usuarios con roles y permisos',
+        duration: 40,
+        priority: 'high',
+        type: 'complex',
+        subtasks: [{
+          title: 'Autenticación y Autorización',
+          description: 'Implementar sistema de login y control de acceso',
+          duration: 15,
+          priority: 'critical'
+        }]
+      }];
+
+      const analysisResult = { isHierarchical: true };
+      const enhanced = service.enhanceTasksData(tasksData, 'project_123', null, 0, analysisResult);
+
+      // Verify exact preservation of user input
+      expect(enhanced[0].title).toBe('Módulo de Gestión de Usuarios');
+      expect(enhanced[0].description).toBe('Sistema completo de gestión de usuarios con roles y permisos');
+      expect(enhanced[0].priority).toBe('high');
+      expect(enhanced[0].type).toBe('complex');
+
+      expect(enhanced[0].subtasks[0].title).toBe('Autenticación y Autorización');
+      expect(enhanced[0].subtasks[0].description).toBe('Implementar sistema de login y control de acceso');
+      expect(enhanced[0].subtasks[0].priority).toBe('critical');
+    });
+
+    it('should maintain original order tracking', () => {
+      const tasksData = [{
+        title: 'First Task',
+        subtasks: [{
+          title: 'First Subtask'
+        }, {
+          title: 'Second Subtask'
+        }]
+      }, {
+        title: 'Second Task'
+      }, {
+        title: 'Third Task',
+        subtasks: [{
+          title: 'Third Task Subtask'
+        }]
+      }];
+
+      const analysisResult = { isHierarchical: true };
+      const enhanced = service.enhanceTasksData(tasksData, 'project_123', null, 0, analysisResult);
+
+      // Verify global order tracking
+      expect(enhanced[0].originalOrder).toBe(0); // First Task
+      expect(enhanced[1].originalOrder).toBe(3); // Second Task (after 2 subtasks)
+      expect(enhanced[2].originalOrder).toBe(4); // Third Task
+
+      // Verify subtask order tracking
+      expect(enhanced[0].subtasks[0].originalOrder).toBe(1); // First Subtask
+      expect(enhanced[0].subtasks[1].originalOrder).toBe(2); // Second Subtask
+      expect(enhanced[2].subtasks[0].originalOrder).toBe(5); // Third Task Subtask
     });
   });
 

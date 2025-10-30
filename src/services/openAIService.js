@@ -6,6 +6,9 @@
 import OpenAI from 'openai';
 import { Project, Task, TeamMember, Deliverable } from '../models/index.js';
 import { getProviderConfig, getErrorConfig } from '../config/aiConfig.js';
+import { promptAnalyzer } from '../utils/promptAnalyzer.js';
+import { hierarchyResponseParser } from '../utils/hierarchyResponseParser.js';
+import { taskHierarchyBuilder } from '../utils/taskHierarchyBuilder.js';
 
 export class OpenAIService {
   constructor() {
@@ -60,16 +63,17 @@ export class OpenAIService {
       complexity = 'medium',
       includeTeamMembers = true,
       maxTasks = 20,
-      estimatedDuration = null
+      estimatedDuration = null,
+      analysisResult = null
     } = options;
 
     try {
-      const systemPrompt = this.createSystemPrompt(complexity, includeTeamMembers, maxTasks);
-      const userPrompt = this.enhanceUserPrompt(prompt, estimatedDuration);
+      const systemPrompt = this.createSystemPrompt(complexity, includeTeamMembers, maxTasks, analysisResult);
+      const userPrompt = this.enhanceUserPrompt(prompt, estimatedDuration, analysisResult);
 
       // Get configuration for this complexity level
       const config = getProviderConfig('openai', complexity);
-      
+
       const response = await this.client.chat.completions.create({
         model: config.model,
         messages: [
@@ -86,7 +90,7 @@ export class OpenAIService {
       }
 
       const aiResponse = response.choices[0].message.content;
-      return this.processAIResponse(aiResponse);
+      return this.processAIResponse(aiResponse, analysisResult);
 
     } catch (error) {
       if (error.code === 'insufficient_quota') {
@@ -109,9 +113,95 @@ export class OpenAIService {
    * @param {string} complexity - Project complexity level
    * @param {boolean} includeTeamMembers - Whether to include team members
    * @param {number} maxTasks - Maximum number of tasks to generate
+   * @param {Object} analysisResult - Optional prompt analysis result for hierarchical enhancement
    * @returns {string} System prompt
    */
-  createSystemPrompt(complexity = 'medium', includeTeamMembers = true, maxTasks = 20) {
+  createSystemPrompt(complexity = 'medium', includeTeamMembers = true, maxTasks = 20, analysisResult = null) {
+    // Check if hierarchical structure is detected
+    const isHierarchical = analysisResult?.isHierarchical || false;
+    const detectedModules = analysisResult?.modules || [];
+    const suggestedLevels = analysisResult?.suggestedLevels || 2;
+    const language = analysisResult?.language || 'english';
+
+    let hierarchicalInstructions = '';
+    let hierarchicalExample = '';
+
+    if (isHierarchical && suggestedLevels >= 3) {
+      hierarchicalInstructions = `
+HIERARCHICAL PROJECT DETECTED:
+- This project has ${detectedModules.length} main modules: ${detectedModules.map(m => m.name).join(', ')}
+- CRITICAL: Generate EXACTLY ${suggestedLevels} levels of hierarchy: Main Tasks → Subtasks → Sub-subtasks
+- Level 0 (Main Tasks): Major modules (e.g., "INTRANET", "COMERCIAL")
+- Level 1 (Subtasks): Submodules within each main module (e.g., "Login Submodule", "Sales Forms Submodule")
+- Level 2 (Sub-subtasks): Specific features within each submodule (e.g., "User Login", "User Registration", "Password Reset")
+- IMPORTANT: Every Level 1 task MUST have multiple Level 2 sub-subtasks
+- DO NOT group multiple features into one task - create separate sub-subtasks for each feature
+- Preserve the exact modular structure from the user description
+${language === 'spanish' ? '- Maintain Spanish terminology and descriptions' : ''}`;
+
+      hierarchicalExample = `
+      "subtasks": [
+        {
+          "title": "Login Submodule",
+          "description": "User authentication and login management",
+          "duration": number_of_working_days,
+          "priority": "low|medium|high",
+          "type": "simple|with_deliverable",
+          "subtasks": [
+            {
+              "title": "User Login Implementation",
+              "description": "Implement encrypted user login functionality",
+              "duration": number_of_working_days,
+              "priority": "low|medium|high",
+              "type": "simple|with_deliverable"
+            },
+            {
+              "title": "User Registration System",
+              "description": "Create new user registration process",
+              "duration": number_of_working_days,
+              "priority": "low|medium|high",
+              "type": "simple|with_deliverable"
+            },
+            {
+              "title": "User Management Operations",
+              "description": "Update and delete user functionality",
+              "duration": number_of_working_days,
+              "priority": "low|medium|high",
+              "type": "simple|with_deliverable"
+            }
+          ]
+        }
+      ]`;
+    } else if (isHierarchical) {
+      hierarchicalInstructions = `
+HIERARCHICAL STRUCTURE DETECTED:
+- Generate ${suggestedLevels} levels of hierarchy
+- Create logical groupings based on detected modules
+${language === 'spanish' ? '- Maintain Spanish terminology and descriptions' : ''}`;
+
+      hierarchicalExample = `
+      "subtasks": [
+        {
+          "title": "Subtask title",
+          "description": "Subtask description",
+          "duration": number_of_working_days,
+          "priority": "low|medium|high",
+          "type": "simple|with_deliverable"
+        }
+      ]`;
+    } else {
+      hierarchicalExample = `
+      "subtasks": [
+        {
+          "title": "Subtask title",
+          "description": "Subtask description",
+          "duration": number_of_working_days,
+          "priority": "low|medium|high",
+          "type": "simple|with_deliverable"
+        }
+      ]`;
+    }
+
     return `You are an expert project manager and software architect. Your task is to generate a comprehensive project structure from user descriptions.
 
 CRITICAL INSTRUCTIONS:
@@ -120,6 +210,7 @@ CRITICAL INSTRUCTIONS:
 3. Ensure the JSON is properly closed with all braces and brackets
 4. Keep descriptions concise to avoid token limits
 5. Maximum ${maxTasks} main tasks
+${hierarchicalInstructions}
 
 Generate a project with the following structure:
 {
@@ -138,15 +229,7 @@ Generate a project with the following structure:
         "type": "presentation|file|exposition|other",
         "description": "Deliverable description"
       },
-      "subtasks": [
-        {
-          "title": "Subtask title",
-          "description": "Subtask description",
-          "duration": number_of_working_days,
-          "priority": "low|medium|high",
-          "type": "simple|with_deliverable"
-        }
-      ]
+${hierarchicalExample}
     }
   ]${includeTeamMembers ? `,
   "teamMembers": [
@@ -160,34 +243,47 @@ Generate a project with the following structure:
 
 Guidelines:
 - Complexity level: ${complexity}
-- Maximum tasks: ${maxTasks}
+- Maximum tasks: ${maxTasks}${isHierarchical && suggestedLevels >= 3 ? ` (Level 0 main tasks only - Level 1 and 2 subtasks are unlimited within reason)` : ''}
 - Duration should be realistic working days (Monday-Saturday, excluding Sunday)
-- Create a logical hierarchy with main tasks and subtasks
+- Create a logical hierarchy with main tasks and subtasks${isHierarchical && suggestedLevels >= 3 ? ' and sub-subtasks' : ''}
 - Include dependencies between tasks where appropriate
-- For ${complexity} complexity: ${this.getComplexityGuidelines(complexity)}
+- For ${complexity} complexity: ${this.getComplexityGuidelines(complexity, isHierarchical, suggestedLevels)}
 - Only include deliverable object if type is "with_deliverable"
 - Dependencies should reference exact task titles
 - Ensure all durations are positive integers
 - Keep descriptions concise (max 100 characters each)
 - Assign appropriate priorities based on task importance and dependencies
+${isHierarchical ? `- CRITICAL HIERARCHY REQUIREMENT: Generate comprehensive ${suggestedLevels}-level hierarchy matching the detected structure` : ''}
+${isHierarchical && suggestedLevels >= 3 ? `- MANDATORY: Each Level 1 subtask MUST contain multiple Level 2 sub-subtasks` : ''}
+${isHierarchical && suggestedLevels >= 3 ? `- DO NOT combine multiple features into single tasks - break them down into individual sub-subtasks` : ''}
+${isHierarchical && suggestedLevels >= 3 ? `- Example structure: "INTRANET" → "Login Submodule" → ["User Login", "User Registration", "Password Reset"]` : ''}
+${detectedModules.length > 0 ? `- MODULE-SPECIFIC GUIDELINES: Create main tasks for: ${detectedModules.map(m => m.name).join(', ')}` : ''}
 - ENSURE the JSON response is complete and properly formatted`;
   }
 
   /**
    * Get complexity-specific guidelines
    * @param {string} complexity - Complexity level
+   * @param {boolean} isHierarchical - Whether hierarchical structure is detected
+   * @param {number} suggestedLevels - Number of suggested hierarchy levels
    * @returns {string} Guidelines for the complexity level
    */
-  getComplexityGuidelines(complexity) {
+  getComplexityGuidelines(complexity, isHierarchical = false, suggestedLevels = 2) {
+    const hierarchicalSuffix = isHierarchical && suggestedLevels >= 3 
+      ? ` Generate ${suggestedLevels} levels: main tasks (modules) → subtasks (submodules) → sub-subtasks (specific features).`
+      : isHierarchical 
+        ? ` Generate ${suggestedLevels} levels with logical groupings.`
+        : '';
+
     switch (complexity) {
       case 'basic':
-        return 'Create 3-8 main tasks with minimal subtasks. Focus on essential milestones.';
+        return `Create 3-8 main tasks with minimal subtasks. Focus on essential milestones.${hierarchicalSuffix}`;
       case 'medium':
-        return 'Create 5-15 main tasks with relevant subtasks. Include planning, development, and testing phases.';
+        return `Create 5-15 main tasks with relevant subtasks. Include planning, development, and testing phases.${hierarchicalSuffix}`;
       case 'detailed':
-        return 'Create 10-20 main tasks with comprehensive subtasks. Include detailed planning, development, testing, deployment, and maintenance phases.';
+        return `Create 10-20 main tasks with comprehensive subtasks. Include detailed planning, development, testing, deployment, and maintenance phases.${hierarchicalSuffix}`;
       default:
-        return 'Create a balanced project structure with appropriate task breakdown.';
+        return `Create a balanced project structure with appropriate task breakdown.${hierarchicalSuffix}`;
     }
   }
 
@@ -195,9 +291,10 @@ Guidelines:
    * Enhance user prompt with additional context
    * @param {string} prompt - Original user prompt
    * @param {number} estimatedDuration - Optional estimated duration
+   * @param {Object} analysisResult - Optional prompt analysis result
    * @returns {string} Enhanced prompt
    */
-  enhanceUserPrompt(prompt, estimatedDuration = null) {
+  enhanceUserPrompt(prompt, estimatedDuration = null, analysisResult = null) {
     let enhancedPrompt = `Create a project for: ${prompt}`;
 
     if (estimatedDuration) {
@@ -212,9 +309,10 @@ Guidelines:
   /**
    * Process AI response and convert to project structure
    * @param {string} response - Raw AI response
+   * @param {Object} analysisResult - Optional prompt analysis result for hierarchical processing
    * @returns {Object} Processed project data
    */
-  processAIResponse(response) {
+  processAIResponse(response, analysisResult = null) {
     if (!response || typeof response !== 'string') {
       throw new Error('Invalid AI response received');
     }
@@ -255,8 +353,95 @@ Guidelines:
       throw new Error(`Generated project validation failed: ${validation.errors.join(', ')}`);
     }
 
-    // Process and enhance the project data
-    return this.enhanceProjectData(projectData);
+    // Use hierarchical processing if hierarchical structure is detected
+    if (analysisResult?.isHierarchical) {
+      return this.processHierarchicalResponse(projectData, analysisResult);
+    }
+
+    // Process and enhance the project data (fallback for non-hierarchical)
+    return this.enhanceProjectData(projectData, analysisResult);
+  }
+
+  /**
+   * Process hierarchical AI response using dedicated hierarchical components
+   * @param {Object} projectData - Parsed project data from AI
+   * @param {Object} analysisResult - Prompt analysis result with hierarchical information
+   * @returns {Object} Enhanced project data with proper hierarchical structure
+   */
+  processHierarchicalResponse(projectData, analysisResult) {
+    try {
+      // Use the hierarchical response parser to build proper task relationships
+      const hierarchyResult = hierarchyResponseParser.parseHierarchicalResponse(projectData, analysisResult);
+
+      // Check if hierarchy parsing was successful
+      if (!hierarchyResult.validationResults.isValid) {
+        console.warn('Hierarchy validation failed, falling back to standard processing:', hierarchyResult.validationResults.errors);
+        return this.enhanceProjectData(projectData, analysisResult);
+      }
+
+      // Generate unique project ID
+      const projectId = 'ai_project_' + Date.now() + '_' + Math.random().toString(36).substring(2, 11);
+
+      // Create enhanced project structure with hierarchical data
+      const enhancedProject = {
+        id: projectId,
+        name: projectData.name,
+        description: projectData.description || '',
+        estimatedDuration: projectData.estimatedDuration || 0,
+        status: 'active',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        tasks: [],
+        teamMembers: []
+      };
+
+      // Process tasks using the hierarchical task builder
+      if (hierarchyResult.mainTasks && hierarchyResult.mainTasks.length > 0) {
+        const hierarchyBuilderResult = taskHierarchyBuilder.buildTaskHierarchy(hierarchyResult.mainTasks, {
+          projectId: projectId,
+          preserveAnalysisMetadata: true,
+          analysisResult: analysisResult
+        });
+
+        // Use the enhanced tasks from the hierarchy builder
+        enhancedProject.tasks = hierarchyBuilderResult.tasks;
+
+        // Add hierarchy metadata to the project
+        enhancedProject.hierarchyMetadata = {
+          isHierarchical: true,
+          totalTasks: hierarchyBuilderResult.metadata.totalTasks,
+          maxDepth: hierarchyBuilderResult.metadata.maxDepth,
+          mainTaskCount: hierarchyBuilderResult.metadata.mainTaskCount,
+          subtaskCount: hierarchyBuilderResult.metadata.subtaskCount,
+          modules: analysisResult.modules || [],
+          analysisComplexity: analysisResult.complexity || 'medium'
+        };
+      } else {
+        // Fallback if no main tasks were generated
+        enhancedProject.tasks = this.enhanceTasksData(projectData.tasks || [], projectId, null, 0, analysisResult, { counter: 0 });
+      }
+
+      // Process team members (same as standard processing)
+      if (projectData.teamMembers && Array.isArray(projectData.teamMembers)) {
+        enhancedProject.teamMembers = projectData.teamMembers.map(member => ({
+          id: 'member_' + Date.now() + '_' + Math.random().toString(36).substring(2, 11),
+          name: member.name || '',
+          email: member.email || '',
+          role: member.role || '',
+          avatar: null,
+          joinedAt: new Date().toISOString()
+        }));
+      }
+
+      return enhancedProject;
+
+    } catch (error) {
+      console.error('Hierarchical processing failed:', error.message);
+      console.warn('Falling back to standard project processing');
+
+      // Fallback to standard processing if hierarchical processing fails
+      return this.enhanceProjectData(projectData, analysisResult);
+    }
   }
 
   /**
@@ -267,7 +452,7 @@ Guidelines:
   cleanAndFixJSON(response) {
     // Remove any markdown code blocks
     let cleaned = response.trim();
-    
+
     if (cleaned.startsWith('```json')) {
       cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '');
     } else if (cleaned.startsWith('```')) {
@@ -277,7 +462,7 @@ Guidelines:
     // Find JSON object boundaries
     const jsonStart = cleaned.indexOf('{');
     const jsonEnd = cleaned.lastIndexOf('}');
-    
+
     if (jsonStart !== -1 && jsonEnd !== -1 && jsonStart < jsonEnd) {
       cleaned = cleaned.substring(jsonStart, jsonEnd + 1);
     }
@@ -293,7 +478,7 @@ Guidelines:
   attemptJSONFix(jsonString) {
     try {
       let fixed = jsonString.trim();
-      
+
       // Handle unterminated strings first
       const quotes = (fixed.match(/"/g) || []).length;
       if (quotes % 2 !== 0) {
@@ -302,10 +487,10 @@ Guidelines:
         const lastQuoteIndex = fixed.lastIndexOf('"');
         const beforeLastQuote = fixed.substring(0, lastQuoteIndex);
         const afterLastQuote = fixed.substring(lastQuoteIndex + 1);
-        
+
         // Count quotes before the last quote
         const quotesBeforeLast = (beforeLastQuote.match(/"/g) || []).length;
-        
+
         // If even number of quotes before, this is an opening quote that needs closing
         if (quotesBeforeLast % 2 === 0) {
           // Check if there's unfinished content after the quote
@@ -321,27 +506,27 @@ Guidelines:
           }
         }
       }
-      
+
       // Count opening and closing braces/brackets
       const openBraces = (fixed.match(/\{/g) || []).length;
       const closeBraces = (fixed.match(/\}/g) || []).length;
       const openBrackets = (fixed.match(/\[/g) || []).length;
       const closeBrackets = (fixed.match(/\]/g) || []).length;
-      
+
       // Add missing closing brackets first (inner structures)
       for (let i = 0; i < openBrackets - closeBrackets; i++) {
         fixed += ']';
       }
-      
+
       // Add missing closing braces (outer structures)
       for (let i = 0; i < openBraces - closeBraces; i++) {
         fixed += '}';
       }
-      
+
       // Test if the fixed JSON is valid
       JSON.parse(fixed);
       return fixed;
-      
+
     } catch (error) {
       // If we can't fix it, return null
       return null;
@@ -494,9 +679,10 @@ Guidelines:
   /**
    * Enhance project data with additional metadata and IDs
    * @param {Object} projectData - Raw project data from AI
+   * @param {Object} analysisResult - Optional prompt analysis result for hierarchical enhancement
    * @returns {Object} Enhanced project data
    */
-  enhanceProjectData(projectData) {
+  enhanceProjectData(projectData, analysisResult = null) {
     // Generate unique project ID
     const projectId = 'ai_project_' + Date.now() + '_' + Math.random().toString(36).substring(2, 11);
 
@@ -515,7 +701,7 @@ Guidelines:
 
     // Process tasks
     if (projectData.tasks && Array.isArray(projectData.tasks)) {
-      enhancedProject.tasks = this.enhanceTasksData(projectData.tasks, projectId);
+      enhancedProject.tasks = this.enhanceTasksData(projectData.tasks, projectId, null, 0, analysisResult, { counter: 0 });
     }
 
     // Process team members
@@ -539,10 +725,17 @@ Guidelines:
    * @param {string} projectId - Project ID
    * @param {string} parentTaskId - Parent task ID for subtasks
    * @param {number} level - Task hierarchy level
+   * @param {Object} analysisResult - Optional prompt analysis result for hierarchical enhancement
+   * @param {Object} globalOrder - Global task order counter for preserving sequence
    * @returns {Array} Enhanced tasks data
    */
-  enhanceTasksData(tasks, projectId, parentTaskId = null, level = 0) {
+  enhanceTasksData(tasks, projectId, parentTaskId = null, level = 0, analysisResult = null, globalOrder = { counter: 0 }) {
     const enhancedTasks = [];
+
+    // Ensure globalOrder is properly initialized
+    if (!globalOrder || typeof globalOrder.counter !== 'number') {
+      globalOrder = { counter: 0 };
+    }
 
     tasks.forEach(task => {
       const taskId = 'task_' + Date.now() + '_' + Math.random().toString(36).substring(2, 11);
@@ -563,8 +756,48 @@ Guidelines:
         assignedTo: null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        subtasks: []
+        subtasks: [],
+        // Hierarchical metadata
+        isMainTask: level === 0,
+        hasSubtasks: !!(task.subtasks && Array.isArray(task.subtasks) && task.subtasks.length > 0),
+        originalOrder: globalOrder.counter++,
+        moduleType: null,
+        aggregatedDuration: task.duration || 1
       };
+
+      // Enhanced hierarchical metadata when analysis result is available
+      if (analysisResult?.isHierarchical) {
+        // Try to match task with detected modules for moduleType metadata
+        if (level === 0 && analysisResult.modules && Array.isArray(analysisResult.modules)) {
+          const matchingModule = analysisResult.modules.find(module => {
+            const taskTitle = task.title.toUpperCase();
+            const moduleName = module.name.toUpperCase();
+            return taskTitle.includes(moduleName) ||
+              moduleName.includes(taskTitle) ||
+              (module.keywords && module.keywords.some(keyword =>
+                taskTitle.includes(keyword.toUpperCase())
+              ));
+          });
+
+          if (matchingModule) {
+            enhancedTask.moduleType = matchingModule.name;
+          }
+        }
+
+        // Add additional metadata for complex hierarchical structures
+        if (analysisResult.complexity === 'high' && level === 0) {
+          enhancedTask.complexityLevel = 'high';
+          enhancedTask.estimatedSubtasks = task.subtasks ? task.subtasks.length : 0;
+        }
+      } else if (level === 0) {
+        // Fallback: try to detect common module patterns in task titles
+        const taskTitle = task.title.toUpperCase();
+        const commonModules = ['INTRANET', 'COMERCIAL', 'OPERACIONES', 'ADMIN', 'USUARIOS', 'REPORTES'];
+        const detectedModule = commonModules.find(module => taskTitle.includes(module));
+        if (detectedModule) {
+          enhancedTask.moduleType = detectedModule;
+        }
+      }
 
       // Add deliverable if present
       if (task.deliverable && task.type === 'with_deliverable') {
@@ -582,8 +815,19 @@ Guidelines:
           task.subtasks,
           projectId,
           taskId,
-          level + 1
+          level + 1,
+          analysisResult,
+          globalOrder
         );
+
+        // Calculate aggregated duration from subtasks
+        const subtaskDurations = enhancedTask.subtasks.reduce((sum, subtask) => {
+          return sum + (subtask.aggregatedDuration || subtask.duration || 0);
+        }, 0);
+
+        if (subtaskDurations > 0) {
+          enhancedTask.aggregatedDuration = subtaskDurations;
+        }
       }
 
       enhancedTasks.push(enhancedTask);
@@ -687,7 +931,7 @@ Guidelines:
    */
   shouldRetryError(error) {
     const errorConfig = getErrorConfig('openai');
-    
+
     // Don't retry on permanent failures
     if (errorConfig.permanent.includes(error.code)) {
       return false;

@@ -116,6 +116,11 @@ export class StorageService {
       // Validate project before saving
       validateProject(project);
 
+      // Validate and preserve hierarchical task relationships
+      if (project.tasks && project.tasks.length > 0) {
+        this.validateAndPreserveTaskHierarchy(project.tasks);
+      }
+
       const projects = this.getAllProjects();
       const existingIndex = projects.findIndex(p => p.id === project.id);
       
@@ -196,6 +201,9 @@ export class StorageService {
       } else {
         project.tasks.push(task.toJSON());
       }
+
+      // Ensure hierarchy integrity after task modification
+      this.validateAndPreserveTaskHierarchy(project.tasks);
 
       this.saveProject(project);
       return task;
@@ -405,6 +413,168 @@ export class StorageService {
       console.error('Error clearing data:', error);
       throw new Error('Error al limpiar los datos');
     }
+  }
+
+  /**
+   * Validate and preserve hierarchical task relationships during save operations
+   * @param {Array} tasks - Array of tasks to validate
+   */
+  validateAndPreserveTaskHierarchy(tasks) {
+    try {
+      const taskMap = new Map();
+      const parentChildMap = new Map();
+      
+      // First pass: build task map and identify relationships
+      tasks.forEach(task => {
+        taskMap.set(task.id, task);
+        
+        if (task.parentTaskId) {
+          if (!parentChildMap.has(task.parentTaskId)) {
+            parentChildMap.set(task.parentTaskId, []);
+          }
+          parentChildMap.get(task.parentTaskId).push(task.id);
+        }
+      });
+      
+      // Second pass: validate hierarchy integrity
+      tasks.forEach(task => {
+        // Validate parent-child relationships
+        if (task.parentTaskId && !taskMap.has(task.parentTaskId)) {
+          console.warn(`Task ${task.id} references non-existent parent ${task.parentTaskId}. Removing parent reference.`);
+          task.parentTaskId = null;
+          task.level = 0;
+          task.isMainTask = true;
+        }
+        
+        // Validate subtasks array consistency
+        if (task.subtasks && Array.isArray(task.subtasks)) {
+          const validSubtasks = task.subtasks.filter(subtask => {
+            if (typeof subtask === 'object' && subtask.id) {
+              return taskMap.has(subtask.id);
+            }
+            return false;
+          });
+          
+          if (validSubtasks.length !== task.subtasks.length) {
+            console.warn(`Task ${task.id} has invalid subtasks. Cleaning up subtasks array.`);
+            task.subtasks = validSubtasks;
+          }
+          
+          // Update hasSubtasks flag
+          task.hasSubtasks = validSubtasks.length > 0;
+        }
+        
+        // Validate level consistency
+        if (task.parentTaskId) {
+          const parent = taskMap.get(task.parentTaskId);
+          if (parent && typeof parent.level === 'number') {
+            const expectedLevel = parent.level + 1;
+            if (task.level !== expectedLevel) {
+              console.warn(`Task ${task.id} level mismatch. Expected ${expectedLevel}, got ${task.level}. Correcting.`);
+              task.level = expectedLevel;
+            }
+          }
+        }
+        
+        // Validate isMainTask flag
+        const shouldBeMainTask = !task.parentTaskId;
+        if (task.isMainTask !== shouldBeMainTask) {
+          console.warn(`Task ${task.id} isMainTask flag mismatch. Correcting.`);
+          task.isMainTask = shouldBeMainTask;
+        }
+        
+        // Recalculate aggregated duration for parent tasks
+        if (task.hasSubtasks && parentChildMap.has(task.id)) {
+          const childIds = parentChildMap.get(task.id);
+          const childTasks = childIds.map(id => taskMap.get(id)).filter(Boolean);
+          
+          if (childTasks.length > 0) {
+            const aggregatedDuration = childTasks.reduce((sum, child) => {
+              return sum + (child.aggregatedDuration || child.duration || 0);
+            }, 0);
+            
+            if (aggregatedDuration > 0) {
+              task.aggregatedDuration = aggregatedDuration;
+            }
+          }
+        } else if (!task.hasSubtasks) {
+          // For leaf tasks, aggregated duration should equal duration
+          task.aggregatedDuration = task.duration || 1;
+        }
+      });
+      
+      // Third pass: detect and resolve circular dependencies
+      this.detectAndResolveCircularDependencies(tasks, taskMap, parentChildMap);
+      
+    } catch (error) {
+      console.warn('Error validating task hierarchy:', error.message);
+      // Continue with save operation even if hierarchy validation fails
+    }
+  }
+
+  /**
+   * Detect and resolve circular dependencies in task hierarchy
+   * @param {Array} tasks - Array of tasks
+   * @param {Map} taskMap - Map of task ID to task object
+   * @param {Map} parentChildMap - Map of parent ID to child IDs
+   */
+  detectAndResolveCircularDependencies(tasks, taskMap, parentChildMap) {
+    const visited = new Set();
+    const recursionStack = new Set();
+    
+    tasks.forEach(task => {
+      if (!visited.has(task.id)) {
+        const path = [];
+        if (this.hasCycleDFS(task.id, taskMap, visited, recursionStack, path)) {
+          console.warn(`Circular dependency detected in task hierarchy: ${path.join(' -> ')}`);
+          
+          // Resolve by breaking the cycle at the last task in the path
+          const lastTaskId = path[path.length - 1];
+          const lastTask = taskMap.get(lastTaskId);
+          if (lastTask) {
+            console.warn(`Breaking cycle by removing parent reference from task ${lastTaskId}`);
+            lastTask.parentTaskId = null;
+            lastTask.level = 0;
+            lastTask.isMainTask = true;
+          }
+        }
+      }
+    });
+  }
+
+  /**
+   * Depth-first search to detect cycles in task hierarchy
+   * @param {string} taskId - Current task ID
+   * @param {Map} taskMap - Map of task ID to task object
+   * @param {Set} visited - Set of visited nodes
+   * @param {Set} recursionStack - Current recursion stack
+   * @param {Array} path - Current path for cycle detection
+   * @returns {boolean} True if cycle detected
+   */
+  hasCycleDFS(taskId, taskMap, visited, recursionStack, path) {
+    visited.add(taskId);
+    recursionStack.add(taskId);
+    path.push(taskId);
+
+    const task = taskMap.get(taskId);
+    if (task && task.parentTaskId) {
+      const parentId = task.parentTaskId;
+      
+      if (!visited.has(parentId)) {
+        if (this.hasCycleDFS(parentId, taskMap, visited, recursionStack, path)) {
+          return true;
+        }
+      } else if (recursionStack.has(parentId)) {
+        // Cycle detected
+        const cycleStart = path.indexOf(parentId);
+        path.splice(0, cycleStart); // Keep only the cycle part
+        return true;
+      }
+    }
+
+    recursionStack.delete(taskId);
+    path.pop();
+    return false;
   }
 
   /**
