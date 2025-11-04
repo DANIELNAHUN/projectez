@@ -68,8 +68,14 @@ export class OpenAIService {
     } = options;
 
     try {
-      const systemPrompt = this.createSystemPrompt(complexity, includeTeamMembers, maxTasks, analysisResult);
-      const userPrompt = this.enhanceUserPrompt(prompt, estimatedDuration, analysisResult);
+      // If no analysis result is provided, analyze the prompt
+      let promptAnalysis = analysisResult;
+      if (!promptAnalysis) {
+        promptAnalysis = promptAnalyzer.analyzeStructure(prompt);
+      }
+
+      const systemPrompt = this.createSystemPrompt(complexity, includeTeamMembers, maxTasks, promptAnalysis);
+      const userPrompt = this.enhanceUserPrompt(prompt, estimatedDuration, promptAnalysis);
 
       // Get configuration for this complexity level
       const config = getProviderConfig('openai', complexity);
@@ -90,7 +96,7 @@ export class OpenAIService {
       }
 
       const aiResponse = response.choices[0].message.content;
-      return this.processAIResponse(aiResponse, analysisResult);
+      return this.processAIResponse(aiResponse, promptAnalysis);
 
     } catch (error) {
       if (error.code === 'insufficient_quota') {
@@ -122,9 +128,58 @@ export class OpenAIService {
     const detectedModules = analysisResult?.modules || [];
     const suggestedLevels = analysisResult?.suggestedLevels || 2;
     const language = analysisResult?.language || 'english';
+    const formatInfo = analysisResult?.formatInfo;
+    const teamInfo = analysisResult?.teamInfo;
 
     let hierarchicalInstructions = '';
     let hierarchicalExample = '';
+    let formatInstructions = '';
+
+    // Add format-specific instructions if format is detected
+    if (formatInfo && formatInfo.hasFormat) {
+      formatInstructions = `
+FLEXIBLE FORMAT DETECTED:
+- The user has specified a custom format: "${formatInfo.originalFormat}"
+- Separator: "${formatInfo.separator}"
+- Fields detected: ${formatInfo.fields.map(f => `${f.name} (${f.type})`).join(', ')}
+- CRITICAL: When generating tasks, include additional metadata fields based on the detected format
+- For assignment fields, use the detected team member initials or names
+- For duration fields, ensure they match the specified time units
+- Preserve the original format structure in task metadata`;
+
+      // Add team-specific instructions if team info is available
+      if (teamInfo && teamInfo.hasTeamInfo) {
+        formatInstructions += `
+
+TEAM ASSIGNMENT MAPPING:
+- Team members detected: ${teamInfo.members.map(m => `${m.name} (${m.initials})`).join(', ')}
+- CRITICAL: When you see initials like ${teamInfo.members.map(m => m.initials).join(', ')} in the user's task descriptions, map them to the assignedTo field
+- Assignment mapping: ${teamInfo.members.map(m => `${m.initials} → "${m.name}"`).join(', ')}
+- IMPORTANT: Extract assignments from the original task descriptions and preserve them in the generated tasks`;
+      }
+
+      // Add format-specific fields to the task structure
+      const formatFields = formatInfo.fields.map(field => {
+        switch (field.type) {
+          case 'assignment':
+            return `"assignedTo": "team_member_initials_or_name"`;
+          case 'duration':
+            return `"estimatedDays": number_of_days`;
+          case 'priority':
+            return `"priority": "low|medium|high"`;
+          default:
+            return `"${field.name.toLowerCase().replace(/\s+/g, '_')}": "field_value"`;
+        }
+      }).join(',\n          ');
+
+      if (formatFields) {
+        hierarchicalExample = hierarchicalExample.replace(
+          '"type": "simple|with_deliverable"',
+          `"type": "simple|with_deliverable",
+          ${formatFields}`
+        );
+      }
+    }
 
     if (isHierarchical && suggestedLevels >= 3) {
       hierarchicalInstructions = `
@@ -137,7 +192,8 @@ HIERARCHICAL PROJECT DETECTED:
 - IMPORTANT: Every Level 1 task MUST have multiple Level 2 sub-subtasks
 - DO NOT group multiple features into one task - create separate sub-subtasks for each feature
 - Preserve the exact modular structure from the user description
-${language === 'spanish' ? '- Maintain Spanish terminology and descriptions' : ''}`;
+${language === 'spanish' ? '- Maintain Spanish terminology and descriptions' : ''}
+${formatInstructions}`;
 
       hierarchicalExample = `
       "subtasks": [
@@ -147,27 +203,67 @@ ${language === 'spanish' ? '- Maintain Spanish terminology and descriptions' : '
           "duration": number_of_working_days,
           "priority": "low|medium|high",
           "type": "simple|with_deliverable",
+          ${formatInfo && formatInfo.hasFormat ? formatInfo.fields.map(field => {
+            switch (field.type) {
+              case 'assignment':
+                return `"assignedTo": "DC"`;
+              case 'duration':
+                return `"estimatedDays": 4`;
+              default:
+                return `"${field.name.toLowerCase().replace(/\s+/g, '_')}": "sample_value"`;
+            }
+          }).join(',\n          ') + ',' : ''}
           "subtasks": [
             {
               "title": "User Login Implementation",
               "description": "Implement encrypted user login functionality",
               "duration": number_of_working_days,
               "priority": "low|medium|high",
-              "type": "simple|with_deliverable"
+              "type": "simple|with_deliverable"${formatInfo && formatInfo.hasFormat ? ',' : ''}
+              ${formatInfo && formatInfo.hasFormat ? formatInfo.fields.map(field => {
+                switch (field.type) {
+                  case 'assignment':
+                    return `"assignedTo": "DC"`;
+                  case 'duration':
+                    return `"estimatedDays": 1`;
+                  default:
+                    return `"${field.name.toLowerCase().replace(/\s+/g, '_')}": "sample_value"`;
+                }
+              }).join(',\n              ') : ''}
             },
             {
               "title": "User Registration System",
               "description": "Create new user registration process",
               "duration": number_of_working_days,
               "priority": "low|medium|high",
-              "type": "simple|with_deliverable"
+              "type": "simple|with_deliverable"${formatInfo && formatInfo.hasFormat ? ',' : ''}
+              ${formatInfo && formatInfo.hasFormat ? formatInfo.fields.map(field => {
+                switch (field.type) {
+                  case 'assignment':
+                    return `"assignedTo": "DC"`;
+                  case 'duration':
+                    return `"estimatedDays": 1`;
+                  default:
+                    return `"${field.name.toLowerCase().replace(/\s+/g, '_')}": "sample_value"`;
+                }
+              }).join(',\n              ') : ''}
             },
             {
               "title": "User Management Operations",
               "description": "Update and delete user functionality",
               "duration": number_of_working_days,
               "priority": "low|medium|high",
-              "type": "simple|with_deliverable"
+              "type": "simple|with_deliverable"${formatInfo && formatInfo.hasFormat ? ',' : ''}
+              ${formatInfo && formatInfo.hasFormat ? formatInfo.fields.map(field => {
+                switch (field.type) {
+                  case 'assignment':
+                    return `"assignedTo": "DC"`;
+                  case 'duration':
+                    return `"estimatedDays": 1`;
+                  default:
+                    return `"${field.name.toLowerCase().replace(/\s+/g, '_')}": "sample_value"`;
+                }
+              }).join(',\n              ') : ''}
             }
           ]
         }
@@ -177,7 +273,8 @@ ${language === 'spanish' ? '- Maintain Spanish terminology and descriptions' : '
 HIERARCHICAL STRUCTURE DETECTED:
 - Generate ${suggestedLevels} levels of hierarchy
 - Create logical groupings based on detected modules
-${language === 'spanish' ? '- Maintain Spanish terminology and descriptions' : ''}`;
+${language === 'spanish' ? '- Maintain Spanish terminology and descriptions' : ''}
+${formatInstructions}`;
 
       hierarchicalExample = `
       "subtasks": [
@@ -186,7 +283,17 @@ ${language === 'spanish' ? '- Maintain Spanish terminology and descriptions' : '
           "description": "Subtask description",
           "duration": number_of_working_days,
           "priority": "low|medium|high",
-          "type": "simple|with_deliverable"
+          "type": "simple|with_deliverable"${formatInfo && formatInfo.hasFormat ? ',' : ''}
+          ${formatInfo && formatInfo.hasFormat ? formatInfo.fields.map(field => {
+            switch (field.type) {
+              case 'assignment':
+                return `"assignedTo": "team_member"`;
+              case 'duration':
+                return `"estimatedDays": number_of_days`;
+              default:
+                return `"${field.name.toLowerCase().replace(/\s+/g, '_')}": "field_value"`;
+            }
+          }).join(',\n          ') : ''}
         }
       ]`;
     } else {
@@ -197,7 +304,17 @@ ${language === 'spanish' ? '- Maintain Spanish terminology and descriptions' : '
           "description": "Subtask description",
           "duration": number_of_working_days,
           "priority": "low|medium|high",
-          "type": "simple|with_deliverable"
+          "type": "simple|with_deliverable"${formatInfo && formatInfo.hasFormat ? ',' : ''}
+          ${formatInfo && formatInfo.hasFormat ? formatInfo.fields.map(field => {
+            switch (field.type) {
+              case 'assignment':
+                return `"assignedTo": "team_member"`;
+              case 'duration':
+                return `"estimatedDays": number_of_days`;
+              default:
+                return `"${field.name.toLowerCase().replace(/\s+/g, '_')}": "field_value"`;
+            }
+          }).join(',\n          ') : ''}
         }
       ]`;
     }
@@ -253,6 +370,8 @@ Guidelines:
 - Ensure all durations are positive integers
 - Keep descriptions concise (max 100 characters each)
 - Assign appropriate priorities based on task importance and dependencies
+${teamInfo && teamInfo.hasTeamInfo ? `- ASSIGNMENT EXTRACTION: When you see task descriptions like "Login de usuarios (encriptados) / DC / 1", extract "DC" and map it to "${teamInfo.assignments['DC'] || 'DC'}" in the assignedTo field` : ''}
+${teamInfo && teamInfo.hasTeamInfo ? `- PRESERVE ALL ASSIGNMENTS: Every task that has an assignment in the original description MUST have the assignedTo field populated` : ''}
 ${isHierarchical ? `- CRITICAL HIERARCHY REQUIREMENT: Generate comprehensive ${suggestedLevels}-level hierarchy matching the detected structure` : ''}
 ${isHierarchical && suggestedLevels >= 3 ? `- MANDATORY: Each Level 1 subtask MUST contain multiple Level 2 sub-subtasks` : ''}
 ${isHierarchical && suggestedLevels >= 3 ? `- DO NOT combine multiple features into single tasks - break them down into individual sub-subtasks` : ''}
@@ -753,7 +872,7 @@ ${detectedModules.length > 0 ? `- MODULE-SPECIFIC GUIDELINES: Create main tasks 
         progress: 0,
         level: level,
         adjustStartDate: false,
-        assignedTo: null,
+        assignedTo: task.assignedTo || null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         subtasks: [],
@@ -764,6 +883,39 @@ ${detectedModules.length > 0 ? `- MODULE-SPECIFIC GUIDELINES: Create main tasks 
         moduleType: null,
         aggregatedDuration: task.duration || 1
       };
+
+      // Add flexible format fields if they exist in the task
+      if (analysisResult?.formatInfo?.hasFormat) {
+        analysisResult.formatInfo.fields.forEach(field => {
+          const fieldKey = field.name.toLowerCase().replace(/\s+/g, '_');
+          if (task[fieldKey] !== undefined) {
+            enhancedTask[fieldKey] = task[fieldKey];
+          }
+          
+          // Handle specific field types
+          switch (field.type) {
+            case 'assignment':
+              if (task.assignedTo) {
+                enhancedTask.assignedTo = task.assignedTo;
+              }
+              break;
+            case 'duration':
+              if (task.estimatedDays) {
+                enhancedTask.estimatedDays = task.estimatedDays;
+                enhancedTask.duration = task.estimatedDays; // Sync with main duration field
+              }
+              break;
+          }
+        });
+
+        // Extract assignment from task title/description if not already set
+        if (!enhancedTask.assignedTo && analysisResult.teamInfo?.hasTeamInfo) {
+          const assignment = this.extractAssignmentFromText(task.title + ' ' + (task.description || ''), analysisResult.teamInfo);
+          if (assignment) {
+            enhancedTask.assignedTo = assignment;
+          }
+        }
+      }
 
       // Enhanced hierarchical metadata when analysis result is available
       if (analysisResult?.isHierarchical) {
@@ -834,6 +986,36 @@ ${detectedModules.length > 0 ? `- MODULE-SPECIFIC GUIDELINES: Create main tasks 
     });
 
     return enhancedTasks;
+  }
+
+  /**
+   * Extract assignment from task text using team information
+   * @param {string} text - Task title and description text
+   * @param {Object} teamInfo - Team information with members and initials
+   * @returns {string|null} Assigned team member name or null
+   */
+  extractAssignmentFromText(text, teamInfo) {
+    if (!teamInfo || !teamInfo.hasTeamInfo || !text) {
+      return null;
+    }
+
+    // Look for initials in the text
+    for (const member of teamInfo.members) {
+      const initialsPattern = new RegExp(`\\b${member.initials}\\b`, 'i');
+      if (initialsPattern.test(text)) {
+        return member.name;
+      }
+    }
+
+    // Look for full names in the text
+    for (const member of teamInfo.members) {
+      const namePattern = new RegExp(`\\b${member.name.replace(/\s+/g, '\\s+')}\\b`, 'i');
+      if (namePattern.test(text)) {
+        return member.name;
+      }
+    }
+
+    return null;
   }
 
   /**

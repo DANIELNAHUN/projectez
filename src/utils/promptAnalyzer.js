@@ -32,6 +32,24 @@ export class PromptAnalyzer {
       spanish: /\b(crear|desarrollar|implementar|sistema|aplicación|proyecto|gestión|administración|módulos|secciones)\b/gi,
       english: /\b(create|develop|implement|system|application|project|management|administration|modules|sections)\b/gi
     };
+
+    // Flexible format detection patterns
+    this.formatPatterns = {
+      // Detect format specifications like "Titulo / Asignado a / Duracion (días)"
+      formatSpec: /Formato:\s*(.+?)(?:\n|$)/i,
+      // Common separators used in task formats
+      separators: ['/', '|', '-', '\\', '→', '>', '•'],
+      // Duration patterns in different languages
+      durationPatterns: {
+        spanish: /\b(duraci[oó]n|d[ií]as?|semanas?|meses?|horas?)\b/gi,
+        english: /\b(duration|days?|weeks?|months?|hours?)\b/gi
+      },
+      // Assignment patterns
+      assignmentPatterns: {
+        spanish: /\b(asignado\s+a|responsable|encargado|equipo)\b/gi,
+        english: /\b(assigned\s+to|responsible|in\s+charge|team)\b/gi
+      }
+    };
   }
 
   /**
@@ -61,7 +79,8 @@ export class PromptAnalyzer {
           hasIndentation: false,
           hasColons: false
         },
-        confidence: 0
+        confidence: 0,
+        formatInfo: null
       };
     }
     const language = this.detectLanguage(cleanPrompt);
@@ -79,8 +98,18 @@ export class PromptAnalyzer {
         hasIndentation: false,
         hasColons: false
       },
-      confidence: 0
+      confidence: 0,
+      formatInfo: null,
+      teamInfo: null
     };
+
+    // Detect flexible format specification
+    const formatAnalysis = this.detectFlexibleFormat(cleanPrompt, language);
+    analysis.formatInfo = formatAnalysis;
+
+    // Extract team member information
+    const teamInfo = this.extractTeamInformation(cleanPrompt, language);
+    analysis.teamInfo = teamInfo;
 
     // Detect modules
     const moduleAnalysis = this.detectModules(cleanPrompt, language);
@@ -106,6 +135,376 @@ export class PromptAnalyzer {
   }
 
   /**
+   * Detect flexible format specification in the prompt
+   * @param {string} prompt - User prompt
+   * @param {string} language - Detected language
+   * @returns {Object|null} Format information or null if no format detected
+   */
+  detectFlexibleFormat(prompt, language) {
+    // Look for explicit format specification
+    const formatSpecMatch = prompt.match(this.formatPatterns.formatSpec);
+    
+    if (formatSpecMatch) {
+      const formatString = formatSpecMatch[1].trim();
+      return this.parseFormatString(formatString, language);
+    }
+
+    // Look for implicit format patterns in task lines
+    const implicitFormat = this.detectImplicitFormat(prompt, language);
+    if (implicitFormat) {
+      return implicitFormat;
+    }
+
+    return null;
+  }
+
+  /**
+   * Parse a format string to extract field information
+   * @param {string} formatString - Format specification string
+   * @param {string} language - Detected language
+   * @returns {Object} Parsed format information
+   */
+  parseFormatString(formatString, language) {
+    if (!formatString || formatString.trim() === '') {
+      return null;
+    }
+
+    const format = {
+      hasFormat: true,
+      separator: null,
+      fields: [],
+      originalFormat: formatString
+    };
+
+    // Detect separator
+    for (const sep of this.formatPatterns.separators) {
+      if (formatString.includes(sep)) {
+        format.separator = sep;
+        break;
+      }
+    }
+
+    if (!format.separator) {
+      // Default to '/' if no separator found
+      format.separator = '/';
+    }
+
+    // Split by separator and analyze each field
+    const parts = formatString.split(format.separator).map(part => part.trim()).filter(part => part.length > 0);
+    
+    if (parts.length === 0) {
+      return null;
+    }
+
+    parts.forEach((part, index) => {
+      const field = {
+        name: part,
+        type: this.detectFieldType(part, language),
+        position: index,
+        required: true
+      };
+      format.fields.push(field);
+    });
+
+    return format;
+  }
+
+  /**
+   * Detect the type of a format field
+   * @param {string} fieldName - Field name from format
+   * @param {string} language - Detected language
+   * @returns {string} Field type
+   */
+  detectFieldType(fieldName, language) {
+    const lowerField = fieldName.toLowerCase();
+    
+    // Duration patterns
+    const durationPattern = this.formatPatterns.durationPatterns[language];
+    if (durationPattern.test(fieldName)) {
+      return 'duration';
+    }
+
+    // Assignment patterns
+    const assignmentPattern = this.formatPatterns.assignmentPatterns[language];
+    if (assignmentPattern.test(fieldName)) {
+      return 'assignment';
+    }
+
+    // Common field types
+    if (lowerField.includes('titulo') || lowerField.includes('title') || lowerField.includes('nombre') || lowerField.includes('name')) {
+      return 'title';
+    }
+
+    if (lowerField.includes('descripci') || lowerField.includes('description')) {
+      return 'description';
+    }
+
+    if (lowerField.includes('prioridad') || lowerField.includes('priority')) {
+      return 'priority';
+    }
+
+    if (lowerField.includes('estado') || lowerField.includes('status')) {
+      return 'status';
+    }
+
+    return 'custom';
+  }
+
+  /**
+   * Detect implicit format patterns in task lines
+   * @param {string} prompt - User prompt
+   * @param {string} language - Detected language
+   * @returns {Object|null} Detected format or null
+   */
+  detectImplicitFormat(prompt, language) {
+    const lines = prompt.split('\n');
+    const taskLines = [];
+
+    // Find lines that look like tasks with separators
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.length < 10) continue; // Skip very short lines
+
+      // Look for lines with multiple separators
+      for (const sep of this.formatPatterns.separators) {
+        const parts = trimmed.split(sep);
+        if (parts.length >= 3 && parts.length <= 5) { // Require at least 3 parts for meaningful format
+          // Filter out empty parts
+          const nonEmptyParts = parts.map(p => p.trim()).filter(p => p.length > 0);
+          
+          if (nonEmptyParts.length >= 3) {
+            // Check if this looks like a task format
+            const hasAssignment = this.formatPatterns.assignmentPatterns[language].test(trimmed) ||
+                                 /\b[A-Z]{2,3}\b/.test(trimmed); // Initials like DC, DZ
+            const hasDuration = this.formatPatterns.durationPatterns[language].test(trimmed) ||
+                               /\b\d+\s*(d[ií]as?|days?|meses?|months?|horas?|hours?)\b/i.test(trimmed);
+
+            // Also check for task-like patterns (starts with dash, bullet, etc.)
+            const isTaskLike = /^\s*[-\*\+•]\s+/.test(trimmed) || 
+                              /^\s*\d+[\.\)]\s+/.test(trimmed);
+
+            // Require both task-like structure AND format indicators
+            if (isTaskLike && (hasAssignment || hasDuration)) {
+              taskLines.push({
+                line: trimmed,
+                separator: sep,
+                parts: nonEmptyParts
+              });
+              break; // Found a separator for this line, move to next line
+            }
+          }
+        }
+      }
+    }
+
+    // Require at least 3 consistent task lines for format detection
+    if (taskLines.length >= 3) {
+      return this.analyzeTaskLineFormat(taskLines, language);
+    }
+
+    return null;
+  }
+
+  /**
+   * Analyze task lines to determine format
+   * @param {Array} taskLines - Array of task line objects
+   * @param {string} language - Detected language
+   * @returns {Object} Format information
+   */
+  analyzeTaskLineFormat(taskLines, language) {
+    if (taskLines.length === 0) return null;
+
+    // Find the most common separator and part count
+    const separatorCounts = {};
+    const partCounts = {};
+
+    taskLines.forEach(taskLine => {
+      separatorCounts[taskLine.separator] = (separatorCounts[taskLine.separator] || 0) + 1;
+      partCounts[taskLine.parts.length] = (partCounts[taskLine.parts.length] || 0) + 1;
+    });
+
+    const mostCommonSeparator = Object.keys(separatorCounts).reduce((a, b) => 
+      separatorCounts[a] > separatorCounts[b] ? a : b
+    );
+
+    const mostCommonPartCount = parseInt(Object.keys(partCounts).reduce((a, b) => 
+      partCounts[a] > partCounts[b] ? a : b
+    ));
+
+    // Require at least 2 parts for a valid format
+    if (mostCommonPartCount < 2) return null;
+
+    // Analyze the structure of the most common format
+    const sampleLines = taskLines.filter(tl => 
+      tl.separator === mostCommonSeparator && tl.parts.length === mostCommonPartCount
+    );
+
+    // Require at least 50% consistency for format detection
+    const consistencyRatio = sampleLines.length / taskLines.length;
+    if (consistencyRatio < 0.5) return null;
+
+    const format = {
+      hasFormat: true,
+      separator: mostCommonSeparator,
+      fields: [],
+      originalFormat: `Detected format with ${mostCommonPartCount} fields separated by '${mostCommonSeparator}'`,
+      confidence: Math.min(95, consistencyRatio * 100)
+    };
+
+    // Analyze each position to determine field types
+    for (let i = 0; i < mostCommonPartCount; i++) {
+      const samples = sampleLines.map(sl => sl.parts[i]).filter(Boolean);
+      const fieldType = this.inferFieldTypeFromSamples(samples, language);
+      
+      format.fields.push({
+        name: `Field ${i + 1}`,
+        type: fieldType,
+        position: i,
+        required: true,
+        samples: samples.slice(0, 3) // Keep first 3 samples for reference
+      });
+    }
+
+    return format;
+  }
+
+  /**
+   * Infer field type from sample values
+   * @param {Array} samples - Sample values for this field position
+   * @param {string} language - Detected language
+   * @returns {string} Inferred field type
+   */
+  inferFieldTypeFromSamples(samples, language) {
+    if (samples.length === 0) return 'unknown';
+
+    // Check for duration patterns
+    const durationPattern = this.formatPatterns.durationPatterns[language];
+    if (samples.some(sample => durationPattern.test(sample) || /\b\d+\s*(d[ií]as?|days?)\b/i.test(sample))) {
+      return 'duration';
+    }
+
+    // Check for assignment patterns (initials, names)
+    if (samples.some(sample => /\b[A-Z]{2,3}\b/.test(sample))) {
+      return 'assignment';
+    }
+
+    // Check if first position (likely title)
+    if (samples.every(sample => sample.length > 10)) {
+      return 'title';
+    }
+
+    // Check for numeric values
+    if (samples.every(sample => /^\d+$/.test(sample))) {
+      return 'numeric';
+    }
+
+    return 'custom';
+  }
+
+  /**
+   * Extract team member information from the prompt
+   * @param {string} prompt - User prompt
+   * @param {string} language - Detected language
+   * @returns {Object} Team information
+   */
+  extractTeamInformation(prompt, language) {
+    const teamInfo = {
+      hasTeamInfo: false,
+      members: [],
+      assignments: {} // Map initials to full names
+    };
+
+    // Look for team declarations like "Equipo: Daniel Calcina (DC), Dayana Zegarra (DZ)"
+    // Use a unified pattern that works for both languages
+    const teamPattern = /(?:equipo|team|members):\s*(.+?)(?:\n|$)/gi;
+    let teamMatch;
+    
+    // Reset regex lastIndex to avoid issues with global flag
+    teamPattern.lastIndex = 0;
+    teamMatch = teamPattern.exec(prompt);
+
+    if (teamMatch) {
+      const teamLine = teamMatch[1]; // Get the captured group, not the full match
+      
+      // Extract member patterns like "Daniel Calcina (DC)" or "Dayana Zegarra (DZ)"
+      const memberPattern = /([A-Za-zÀ-ÿ\s]+?)\s*\(([A-Z]{2,4})\)/g;
+      let memberMatch;
+
+      while ((memberMatch = memberPattern.exec(teamLine)) !== null) {
+        const fullName = memberMatch[1].trim();
+        const initials = memberMatch[2].trim();
+        
+        teamInfo.members.push({
+          name: fullName,
+          initials: initials,
+          role: this.inferRoleFromName(fullName, language)
+        });
+
+        teamInfo.assignments[initials] = fullName;
+        teamInfo.hasTeamInfo = true;
+      }
+    }
+
+    // Also extract assignments from task lines to build a more complete picture
+    if (teamInfo.hasTeamInfo) {
+      this.extractTaskAssignments(prompt, teamInfo);
+    }
+
+    return teamInfo;
+  }
+
+  /**
+   * Infer role from team member name (basic heuristics)
+   * @param {string} name - Full name
+   * @param {string} language - Language
+   * @returns {string} Inferred role
+   */
+  inferRoleFromName(name, language) {
+    // Basic role inference - could be enhanced with more sophisticated logic
+    const defaultRoles = {
+      spanish: 'Desarrollador',
+      english: 'Developer'
+    };
+
+    return defaultRoles[language] || defaultRoles.spanish;
+  }
+
+  /**
+   * Extract task assignments from the prompt to validate team member usage
+   * @param {string} prompt - User prompt
+   * @param {Object} teamInfo - Team information object to update
+   */
+  extractTaskAssignments(prompt, teamInfo) {
+    const lines = prompt.split('\n');
+    const assignmentCounts = new Map();
+
+    // Initialize counts for known team members
+    teamInfo.members.forEach(member => {
+      assignmentCounts.set(member.initials, 0);
+    });
+
+    // Count assignments in task lines
+    lines.forEach(line => {
+      const trimmed = line.trim();
+      if (trimmed.length > 10) { // Skip very short lines
+        
+        // Look for initials in the line
+        teamInfo.members.forEach(member => {
+          // Check if the initials appear in the line (with word boundaries)
+          const initialsPattern = new RegExp(`\\b${member.initials}\\b`, 'g');
+          const matches = (trimmed.match(initialsPattern) || []).length;
+          if (matches > 0) {
+            assignmentCounts.set(member.initials, assignmentCounts.get(member.initials) + matches);
+          }
+        });
+      }
+    });
+
+    // Add assignment statistics to team info
+    teamInfo.assignmentStats = Object.fromEntries(assignmentCounts);
+  }
+
+  /**
    * Detect the primary language of the prompt
    * @param {string} prompt - User prompt
    * @returns {string} Detected language ('spanish' or 'english')
@@ -114,8 +513,19 @@ export class PromptAnalyzer {
     const spanishMatches = (prompt.match(this.languagePatterns.spanish) || []).length;
     const englishMatches = (prompt.match(this.languagePatterns.english) || []).length;
 
+    // Check for specific Spanish indicators
+    const spanishIndicators = /\b(equipo|módulo|modulo|tarea|días|duración|asignado)\b/gi;
+    const englishIndicators = /\b(team|module|task|days|duration|assigned)\b/gi;
+    
+    const spanishIndicatorMatches = (prompt.match(spanishIndicators) || []).length;
+    const englishIndicatorMatches = (prompt.match(englishIndicators) || []).length;
+
+    // Combine pattern matches with indicator matches
+    const totalSpanish = spanishMatches + spanishIndicatorMatches;
+    const totalEnglish = englishMatches + englishIndicatorMatches;
+
     // Default to Spanish if no clear indication (since original example was in Spanish)
-    return spanishMatches >= englishMatches ? 'spanish' : 'english';
+    return totalSpanish >= totalEnglish ? 'spanish' : 'english';
   }
 
   /**
@@ -477,6 +887,27 @@ export class PromptAnalyzer {
     summary.push(`Complexity: ${analysis.complexity}`);
     summary.push(`Suggested Levels: ${analysis.suggestedLevels}`);
     summary.push(`Confidence: ${analysis.confidence}%`);
+    
+    if (analysis.formatInfo && analysis.formatInfo.hasFormat) {
+      summary.push(`Format Detected: Yes`);
+      summary.push(`Separator: '${analysis.formatInfo.separator}'`);
+      summary.push(`Fields: ${analysis.formatInfo.fields.map(f => `${f.name} (${f.type})`).join(', ')}`);
+      if (analysis.formatInfo.confidence) {
+        summary.push(`Format Confidence: ${Math.round(analysis.formatInfo.confidence)}%`);
+      }
+    } else {
+      summary.push(`Format Detected: No`);
+    }
+
+    if (analysis.teamInfo && analysis.teamInfo.hasTeamInfo) {
+      summary.push(`Team Members: ${analysis.teamInfo.members.map(m => `${m.name} (${m.initials})`).join(', ')}`);
+      if (analysis.teamInfo.assignmentStats) {
+        const stats = Object.entries(analysis.teamInfo.assignmentStats)
+          .map(([initials, count]) => `${initials}: ${count}`)
+          .join(', ');
+        summary.push(`Assignment Distribution: ${stats}`);
+      }
+    }
     
     if (analysis.modules.length > 0) {
       summary.push(`Modules (${analysis.modules.length}): ${analysis.modules.map(m => m.name).join(', ')}`);
