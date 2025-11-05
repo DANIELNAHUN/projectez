@@ -69,9 +69,13 @@ const actions = {
       const projectStart = new Date(Math.min(...startDates))
       const projectEnd = new Date(Math.max(...endDates))
       
-      // Add some padding to the timeline
+      // Add minimal padding to the timeline, but don't go to previous month
       const paddedStart = new Date(projectStart)
-      paddedStart.setDate(paddedStart.getDate() - 7)
+      // Only add padding if it doesn't cross to previous month
+      const startOfMonth = new Date(projectStart.getFullYear(), projectStart.getMonth(), 1)
+      const daysFromMonthStart = Math.ceil((projectStart - startOfMonth) / (1000 * 60 * 60 * 24))
+      const paddingDays = Math.min(3, daysFromMonthStart) // Max 3 days padding, but don't go to previous month
+      paddedStart.setDate(paddedStart.getDate() - paddingDays)
       
       const paddedEnd = new Date(projectEnd)
       paddedEnd.setDate(paddedEnd.getDate() + 7)
@@ -291,9 +295,12 @@ const actions = {
     const projectStart = new Date(Math.min(...startDates))
     const projectEnd = new Date(Math.max(...endDates))
     
-    // Add padding based on project duration
+    // Add padding based on project duration, but don't go to previous month
     const projectDuration = Math.ceil((projectEnd - projectStart) / (1000 * 60 * 60 * 24))
-    const paddingDays = Math.max(3, Math.min(14, Math.ceil(projectDuration * 0.1))) // 10% padding, min 3 days, max 14 days
+    const startOfMonth = new Date(projectStart.getFullYear(), projectStart.getMonth(), 1)
+    const daysFromMonthStart = Math.ceil((projectStart - startOfMonth) / (1000 * 60 * 60 * 24))
+    const maxPaddingDays = Math.max(3, Math.min(14, Math.ceil(projectDuration * 0.1))) // 10% padding, min 3 days, max 14 days
+    const paddingDays = Math.min(maxPaddingDays, daysFromMonthStart) // Don't go to previous month
     
     const paddedStart = new Date(projectStart)
     paddedStart.setDate(paddedStart.getDate() - paddingDays)
