@@ -181,12 +181,35 @@
         </div>
       </div>
 
+      <!-- Configuration Management -->
+      <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">
+          Gestión de configuración
+        </h3>
+        <div class="flex flex-col sm:flex-row gap-3">
+          <button
+            @click="clearStoredConfiguration"
+            class="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            <i class="pi pi-trash mr-2"></i>
+            Limpiar configuración guardada
+          </button>
+          <button
+            @click="reloadConfiguration"
+            class="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            <i class="pi pi-refresh mr-2"></i>
+            Recargar configuración
+          </button>
+        </div>
+      </div>
+
       <!-- Test Results -->
       <div v-if="testResults.length > 0" class="space-y-2">
         <h4 class="font-medium text-gray-900 dark:text-gray-100">Resultados de pruebas</h4>
         <div
           v-for="result in testResults"
-          :key="result.provider"
+          :key="result.provider + '_' + result.message"
           :class="[
             'p-3 rounded-lg text-sm',
             result.success
@@ -201,7 +224,7 @@
                 result.success ? 'pi-check-circle' : 'pi-times-circle'
               ]"
             ></i>
-            <strong>{{ getProviderDisplayName(result.provider) }}:</strong>
+            <strong v-if="result.provider !== 'system'">{{ getProviderDisplayName(result.provider) }}:</strong>
             <span class="ml-2">{{ result.message || result.error }}</span>
           </div>
         </div>
@@ -236,6 +259,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import ResponsiveModal from './ResponsiveModal.vue'
 import LoadingSpinner from './LoadingSpinner.vue'
 import { aiService } from '../../services/aiService.js'
+import { useAIConfiguration } from '../../composables/useAIConfiguration.js'
 
 const props = defineProps({
   visible: {
@@ -245,6 +269,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:visible', 'configuration-updated'])
+const aiConfig = useAIConfiguration()
 
 // Reactive state
 const isVisible = ref(props.visible)
@@ -262,24 +287,24 @@ const testResults = ref([])
 
 // Computed properties
 const providerInfo = computed(() => {
-  const info = aiService.getProviderInfo()
-  return Object.entries(info).map(([key, data]) => ({
+  const status = aiConfig.getStatus()
+  return Object.entries(status.providerInfo).map(([key, data]) => ({
     key,
     ...data
   }))
 })
 
 const providerStatus = computed(() => {
-  const status = aiService.getProviderStatus()
+  const status = aiConfig.getStatus()
   return {
-    openai: status.configured.includes('openai'),
-    gemini: status.configured.includes('gemini')
+    openai: status.configuredProviders.includes('openai'),
+    gemini: status.configuredProviders.includes('gemini')
   }
 })
 
 const configuredProviders = computed(() => {
-  const status = aiService.getProviderStatus()
-  return status.configured
+  const status = aiConfig.getStatus()
+  return status.configuredProviders
 })
 
 const hasConfiguredProviders = computed(() => {
@@ -287,8 +312,7 @@ const hasConfiguredProviders = computed(() => {
 })
 
 const currentProviderName = computed(() => {
-  const current = aiService.getCurrentProvider()
-  return getProviderDisplayName(current)
+  return getProviderDisplayName(aiConfig.currentProvider.value)
 })
 
 // Watch for prop changes
@@ -315,8 +339,8 @@ const clearApiKeys = () => {
 }
 
 const refreshStatus = () => {
-  const status = aiService.getProviderStatus()
-  selectedActiveProvider.value = status.current
+  const status = aiConfig.getStatus()
+  selectedActiveProvider.value = status.currentProvider
   testResults.value = []
 }
 
@@ -342,17 +366,23 @@ const configureProvider = async (provider) => {
       config.geminiKey = apiKey.trim()
     }
     
-    aiService.configure(config)
+    // Configure using the composable
+    const result = await aiConfig.configureAI(config, true)
     
-    // Test the connection
-    const testResult = await aiService.testConnection()
-    
-    if (testResult.success) {
+    if (result.success) {
       testResults.value = testResults.value.filter(r => r.provider !== provider)
+      
+      let successMessage = `${getProviderDisplayName(provider)} configurado correctamente`
+      if (result.persisted) {
+        successMessage += ' y guardado para futuras sesiones'
+      } else {
+        successMessage += ' (configuración temporal)'
+      }
+      
       testResults.value.push({
         provider,
         success: true,
-        message: `${getProviderDisplayName(provider)} configurado correctamente`
+        message: successMessage
       })
       
       // Clear the API key from memory for security
@@ -364,7 +394,7 @@ const configureProvider = async (provider) => {
       // Emit configuration update
       emit('configuration-updated', { provider, success: true })
     } else {
-      throw new Error(testResult.error)
+      throw new Error(result.error)
     }
   } catch (error) {
     testResults.value = testResults.value.filter(r => r.provider !== provider)
@@ -375,6 +405,52 @@ const configureProvider = async (provider) => {
     })
   } finally {
     configuringProvider.value = null
+  }
+}
+
+// Load stored API keys from localStorage
+const loadStoredAPIKeys = () => {
+  try {
+    const stored = localStorage.getItem('ai_api_config')
+    if (stored) {
+      const config = JSON.parse(stored)
+      return {
+        openaiKey: config.openaiKey || null,
+        geminiKey: config.geminiKey || null,
+        defaultProvider: config.defaultProvider || null
+      }
+    }
+  } catch (error) {
+    console.error('Error loading stored API keys:', error)
+  }
+  return {}
+}
+
+// Save API keys to localStorage
+const saveAPIKeysToStorage = (config) => {
+  try {
+    const toStore = {
+      openaiKey: config.openaiKey || null,
+      geminiKey: config.geminiKey || null,
+      defaultProvider: config.defaultProvider || null,
+      updatedAt: new Date().toISOString()
+    }
+    localStorage.setItem('ai_api_config', JSON.stringify(toStore))
+    return true
+  } catch (error) {
+    console.error('Error saving API keys to storage:', error)
+    return false
+  }
+}
+
+// Clear stored API keys
+const clearStoredAPIKeys = () => {
+  try {
+    localStorage.removeItem('ai_api_config')
+    return true
+  } catch (error) {
+    console.error('Error clearing stored API keys:', error)
+    return false
   }
 }
 
@@ -418,24 +494,37 @@ const testAllProviders = async () => {
   testResults.value = []
   
   try {
-    const results = await aiService.testAllConnections()
+    const result = await aiConfig.testAllProviders()
     
-    testResults.value = Object.entries(results).map(([provider, result]) => ({
-      provider,
-      success: result.success,
-      message: result.success ? result.message : result.error
-    }))
+    if (result.success) {
+      testResults.value = Object.entries(result.results).map(([provider, providerResult]) => ({
+        provider,
+        success: providerResult.success,
+        message: providerResult.success ? providerResult.message : providerResult.error
+      }))
+    } else {
+      testResults.value.push({
+        provider: 'system',
+        success: false,
+        error: `Error al probar proveedores: ${result.error}`
+      })
+    }
   } catch (error) {
     console.error('Error testing all providers:', error)
+    testResults.value.push({
+      provider: 'system',
+      success: false,
+      error: 'Error inesperado al probar proveedores'
+    })
   } finally {
     testingAll.value = false
   }
 }
 
 const changeActiveProvider = () => {
-  try {
-    aiService.setProvider(selectedActiveProvider.value)
-    
+  const result = aiConfig.switchProvider(selectedActiveProvider.value)
+  
+  if (result.success) {
     testResults.value.push({
       provider: selectedActiveProvider.value,
       success: true,
@@ -447,17 +536,82 @@ const changeActiveProvider = () => {
       success: true, 
       action: 'switch' 
     })
-  } catch (error) {
+  } else {
     testResults.value.push({
       provider: selectedActiveProvider.value,
       success: false,
-      error: `Error al cambiar proveedor: ${error.message}`
+      error: `Error al cambiar proveedor: ${result.error}`
+    })
+  }
+}
+
+const clearStoredConfiguration = () => {
+  const result = aiConfig.clearStoredConfiguration()
+  
+  if (result.success) {
+    let message = 'Configuración guardada eliminada correctamente'
+    
+    if (result.reloaded) {
+      message += `. Recargado desde ${result.newSource === 'env' ? 'variables de entorno' : 'configuración por defecto'}`
+    }
+    
+    testResults.value.push({
+      provider: 'system',
+      success: true,
+      message
+    })
+    
+    // Refresh status
+    refreshStatus()
+  } else {
+    testResults.value.push({
+      provider: 'system',
+      success: false,
+      error: `Error al eliminar la configuración guardada: ${result.error}`
+    })
+  }
+}
+
+const reloadConfiguration = () => {
+  testResults.value = []
+  const result = aiConfig.loadConfiguration()
+  refreshStatus()
+  
+  if (result.success) {
+    const sourceLabel = result.source === 'stored' ? 'configuración personalizada' : 'variables de entorno'
+    testResults.value.push({
+      provider: 'system',
+      success: true,
+      message: `Configuración recargada desde ${sourceLabel}`
+    })
+  } else {
+    testResults.value.push({
+      provider: 'system',
+      success: false,
+      error: `Error al recargar configuración: ${result.error}`
     })
   }
 }
 
 // Initialize component
 onMounted(() => {
+  const result = aiConfig.loadConfiguration()
+  
+  if (result.success) {
+    const sourceLabel = result.source === 'stored' ? 'almacenamiento local' : 'variables de entorno'
+    testResults.value.push({
+      provider: 'system',
+      success: true,
+      message: `Configuración cargada desde ${sourceLabel}`
+    })
+  } else if (result.error !== 'No API keys found') {
+    testResults.value.push({
+      provider: 'system',
+      success: false,
+      error: `Error al cargar configuración: ${result.error}`
+    })
+  }
+  
   refreshStatus()
 })
 </script>

@@ -22,9 +22,10 @@ export class AIService {
    * @param {string} config.openaiKey - OpenAI API key
    * @param {string} config.geminiKey - Gemini API key
    * @param {string} config.defaultProvider - Default provider to use ('openai' or 'gemini')
+   * @param {boolean} config.persist - Whether to persist configuration to localStorage
    */
   configure(config = {}) {
-    const { openaiKey, geminiKey, defaultProvider = 'openai' } = config;
+    const { openaiKey, geminiKey, defaultProvider = 'openai', persist = false } = config;
     
     // Configure OpenAI if key is provided
     if (openaiKey) {
@@ -33,6 +34,7 @@ export class AIService {
         console.log('OpenAI service configured successfully');
       } catch (error) {
         console.error('Failed to configure OpenAI:', error.message);
+        throw error;
       }
     }
 
@@ -43,6 +45,7 @@ export class AIService {
         console.log('Gemini service configured successfully');
       } catch (error) {
         console.error('Failed to configure Gemini:', error.message);
+        throw error;
       }
     }
 
@@ -50,6 +53,66 @@ export class AIService {
     if (this.providers[defaultProvider]) {
       this.defaultProvider = defaultProvider;
       this.currentProvider = defaultProvider;
+    }
+
+    // Persist configuration if requested
+    if (persist) {
+      this.persistConfiguration(config);
+    }
+  }
+
+  /**
+   * Persist configuration to localStorage
+   * @param {Object} config - Configuration to persist
+   */
+  persistConfiguration(config) {
+    try {
+      const toStore = {
+        openaiKey: config.openaiKey || null,
+        geminiKey: config.geminiKey || null,
+        defaultProvider: config.defaultProvider || this.defaultProvider,
+        updatedAt: new Date().toISOString()
+      };
+      localStorage.setItem('ai_api_config', JSON.stringify(toStore));
+      console.log('AI configuration persisted to localStorage');
+    } catch (error) {
+      console.error('Failed to persist AI configuration:', error);
+    }
+  }
+
+  /**
+   * Load configuration from localStorage
+   * @returns {Object} Stored configuration or empty object
+   */
+  loadPersistedConfiguration() {
+    try {
+      const stored = localStorage.getItem('ai_api_config');
+      if (stored) {
+        const config = JSON.parse(stored);
+        console.log('AI configuration loaded from localStorage');
+        return {
+          openaiKey: config.openaiKey || null,
+          geminiKey: config.geminiKey || null,
+          defaultProvider: config.defaultProvider || null
+        };
+      }
+    } catch (error) {
+      console.error('Failed to load persisted AI configuration:', error);
+    }
+    return {};
+  }
+
+  /**
+   * Clear persisted configuration
+   */
+  clearPersistedConfiguration() {
+    try {
+      localStorage.removeItem('ai_api_config');
+      console.log('AI configuration cleared from localStorage');
+      return true;
+    } catch (error) {
+      console.error('Failed to clear persisted AI configuration:', error);
+      return false;
     }
   }
 
@@ -324,8 +387,8 @@ export class AIService {
       },
       gemini: {
         name: 'Google Gemini',
-        models: ['gemini-pro'],
-        description: 'Google Gemini Pro for project generation',
+        models: ['gemini-1.5-flash', 'gemini-1.5-pro'],
+        description: 'Google Gemini 1.5 Flash for project generation',
         configured: this.providers.gemini.isReady()
       }
     };

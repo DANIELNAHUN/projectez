@@ -24,7 +24,7 @@ export class GeminiService {
 
     try {
       this.client = new GoogleGenerativeAI(apiKey);
-      this.model = this.client.getGenerativeModel({ model: 'gemini-pro' });
+      this.model = this.client.getGenerativeModel({ model: 'gemini-1.5-flash' });
       this.isConfigured = true;
     } catch (error) {
       throw new Error(`Failed to configure Gemini client: ${error.message}`);
@@ -718,13 +718,34 @@ Guidelines:
       return {
         success: true,
         message: 'Gemini connection successful',
-        model: 'gemini-pro',
+        model: 'gemini-1.5-flash',
         response: text
       };
     } catch (error) {
+      console.error('Gemini connection test error:', error);
+      
+      let errorMessage = error.message || 'Error desconocido';
+      
+      // Handle specific Gemini API errors
+      if (error.status === 404) {
+        errorMessage = 'Modelo Gemini no encontrado. Verifica que tu API key tenga acceso a Gemini 1.5 Flash.';
+      } else if (error.status === 401 || error.status === 403) {
+        errorMessage = 'API key de Gemini inválida o sin permisos. Verifica tu clave en Google AI Studio.';
+      } else if (error.status === 429) {
+        errorMessage = 'Límite de velocidad de Gemini excedido. Espera unos minutos antes de intentar nuevamente.';
+      } else if (error.status >= 500) {
+        errorMessage = 'Error del servidor de Gemini. Intenta nuevamente en unos minutos.';
+      } else if (errorMessage.includes('API_KEY_INVALID')) {
+        errorMessage = 'Clave API de Gemini inválida. Verifica tu configuración en Google AI Studio.';
+      } else if (errorMessage.includes('QUOTA_EXCEEDED')) {
+        errorMessage = 'Cuota de Gemini excedida. Verifica tu configuración de facturación.';
+      } else if (errorMessage.includes('MODEL_NOT_FOUND')) {
+        errorMessage = 'Modelo Gemini no encontrado. Verifica que tengas acceso a Gemini 1.5 Flash.';
+      }
+      
       return {
         success: false,
-        error: error.message
+        error: errorMessage
       };
     }
   }

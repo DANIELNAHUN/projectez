@@ -23,7 +23,7 @@
     <!-- Timeline body with task bars -->
     <div class="timeline-body relative">
       <!-- Grid lines -->
-      <div class="timeline-grid absolute inset-0 bg-transparent">
+      <div class="timeline-grid absolute inset-0 bg-slate-400">
         <div v-for="(line, index) in gridLines" :key="`grid-${index}`" :style="{ left: line.position + 'px' }"
           class="grid-line absolute top-0 bottom-0 border-l border-gray-200"></div>
       </div>

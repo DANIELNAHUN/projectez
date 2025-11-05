@@ -1,15 +1,11 @@
 <template>
-  <ResponsiveModal
-    v-model:visible="isVisible"
-    title="Generador de Proyectos con IA"
-    subtitle="Describe tu proyecto y la IA creará una estructura completa"
-    size="2xl"
-    :persistent="isGenerating"
-    @close="handleClose"
-  >
+  <ResponsiveModal v-model:visible="isVisible" title="Generador de Proyectos con IA"
+    subtitle="Describe tu proyecto y la IA creará una estructura completa" size="2xl" :persistent="isGenerating"
+    @close="handleClose">
     <div class="space-y-6">
       <!-- API Configuration -->
-      <div v-if="!isConfigured" class="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+      <div v-if="!isConfigured"
+        class="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
         <div class="flex items-start">
           <i class="pi pi-exclamation-triangle text-yellow-600 dark:text-yellow-400 mt-0.5 mr-3"></i>
           <div class="flex-1">
@@ -17,26 +13,23 @@
               Configuración de IA requerida
             </h4>
             <p class="text-sm text-yellow-700 dark:text-yellow-300 mb-3">
-              Para usar el generador de proyectos con IA, configura al menos una API.
+              Para usar el generador de proyectos con IA, configura al menos una API. Tu configuración se guardará de
+              forma segura para futuras sesiones.
             </p>
-            
+
             <!-- Provider Selection -->
             <div class="mb-4">
               <label class="block text-sm font-medium text-yellow-800 dark:text-yellow-200 mb-2">
                 Proveedor de IA
               </label>
               <div class="grid grid-cols-2 gap-3">
-                <button
-                  v-for="provider in availableProviders"
-                  :key="provider.key"
-                  @click="selectedProvider = provider.key"
-                  :class="[
+                <button v-for="provider in availableProviders" :key="provider.key"
+                  @click="selectedProvider = provider.key" :class="[
                     'p-3 text-sm font-medium rounded-lg border-2 transition-all duration-200',
                     selectedProvider === provider.key
                       ? 'border-yellow-500 bg-yellow-100 dark:bg-yellow-800/30 text-yellow-800 dark:text-yellow-200'
                       : 'border-yellow-300 dark:border-yellow-600 bg-white dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300 hover:border-yellow-400'
-                  ]"
-                >
+                  ]">
                   <div class="font-semibold">{{ provider.name }}</div>
                   <div class="text-xs opacity-75 mt-1">{{ provider.description }}</div>
                 </button>
@@ -48,29 +41,30 @@
                 <label class="block text-sm font-medium text-yellow-800 dark:text-yellow-200 mb-1">
                   {{ selectedProviderInfo.label }}
                 </label>
-                <input
-                  v-model="apiKey"
-                  type="password"
-                  :placeholder="selectedProviderInfo.placeholder"
+                <input v-model="apiKey" type="password" :placeholder="selectedProviderInfo.placeholder"
                   class="w-full px-3 py-2 border border-yellow-300 dark:border-yellow-600 rounded-md focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 dark:bg-yellow-900/30 dark:text-yellow-100"
-                  @keyup.enter="configureAPI"
-                />
+                  @keyup.enter="configureAPI" />
               </div>
-              <button
-                @click="configureAPI"
-                :disabled="!apiKey.trim() || isConfiguring"
-                class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-yellow-600 hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <LoadingSpinner v-if="isConfiguring" size="xs" color="white" class="mr-2" />
-                {{ isConfiguring ? 'Configurando...' : 'Configurar API' }}
-              </button>
+              <div class="flex gap-2">
+                <button @click="configureAPI" :disabled="!apiKey.trim() || isConfiguring"
+                  class="flex-1 inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-yellow-600 hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed">
+                  <LoadingSpinner v-if="isConfiguring" size="xs" color="white" class="mr-2" />
+                  {{ isConfiguring ? 'Configurando...' : 'Configurar API' }}
+                </button>
+                <button @click="clearStoredConfiguration"
+                  class="px-3 py-2 border border-yellow-300 dark:border-yellow-600 text-sm font-medium rounded-md text-yellow-700 dark:text-yellow-300 bg-white dark:bg-yellow-900/30 hover:bg-yellow-50 dark:hover:bg-yellow-900/50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500"
+                  title="Limpiar configuración guardada">
+                  <i class="pi pi-trash"></i>
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
       <!-- Provider Status (when configured) -->
-      <div v-if="isConfigured" class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
+      <div v-if="isConfigured"
+        class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
         <div class="flex items-center justify-between">
           <div class="flex items-center">
             <i class="pi pi-check-circle text-green-600 dark:text-green-400 mr-2"></i>
@@ -79,37 +73,28 @@
             </span>
           </div>
           <div class="flex space-x-2">
-            <button
-              @click="showProviderSelector = !showProviderSelector"
-              class="text-sm text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200"
-            >
+            <button @click="showProviderSelector = !showProviderSelector"
+              class="text-sm text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200">
               <i class="pi pi-refresh mr-1"></i>
               Cambiar
             </button>
-            <button
-              @click="showAIConfig = true"
-              class="text-sm text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200"
-            >
+            <button @click="showAIConfig = true"
+              class="text-sm text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200">
               <i class="pi pi-cog mr-1"></i>
               Configurar
             </button>
           </div>
         </div>
-        
+
         <!-- Provider Selector -->
         <div v-if="showProviderSelector" class="mt-3 pt-3 border-t border-green-200 dark:border-green-700">
           <div class="grid grid-cols-2 gap-2">
-            <button
-              v-for="provider in configuredProviders"
-              :key="provider"
-              @click="switchProvider(provider)"
-              :class="[
-                'p-2 text-sm rounded border transition-colors',
-                currentProvider === provider
-                  ? 'border-green-500 bg-green-100 dark:bg-green-800/30 text-green-800 dark:text-green-200'
-                  : 'border-green-300 dark:border-green-600 text-green-700 dark:text-green-300 hover:bg-green-50 dark:hover:bg-green-800/20'
-              ]"
-            >
+            <button v-for="provider in configuredProviders" :key="provider" @click="switchProvider(provider)" :class="[
+              'p-2 text-sm rounded border transition-colors',
+              currentProvider === provider
+                ? 'border-green-500 bg-green-100 dark:bg-green-800/30 text-green-800 dark:text-green-200'
+                : 'border-green-300 dark:border-green-600 text-green-700 dark:text-green-300 hover:bg-green-50 dark:hover:bg-green-800/20'
+            ]">
               {{ getProviderDisplayName(provider) }}
             </button>
           </div>
@@ -124,17 +109,13 @@
             Nivel de complejidad del proyecto
           </label>
           <div class="grid grid-cols-3 gap-3">
-            <button
-              v-for="level in complexityLevels"
-              :key="level.value"
-              @click="selectedComplexity = level.value"
+            <button v-for="level in complexityLevels" :key="level.value" @click="selectedComplexity = level.value"
               :class="[
                 'p-3 text-sm font-medium rounded-lg border-2 transition-all duration-200',
                 selectedComplexity === level.value
                   ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
                   : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
-              ]"
-            >
+              ]">
               <div class="font-semibold">{{ level.label }}</div>
               <div class="text-xs opacity-75 mt-1">{{ level.description }}</div>
             </button>
@@ -148,28 +129,23 @@
             <div v-if="messages.length === 0" class="text-center text-gray-500 dark:text-gray-400 py-8">
               <i class="pi pi-comments text-3xl mb-3"></i>
               <p class="text-lg font-medium mb-2">¡Hola! Soy tu asistente de IA</p>
-              <p class="text-sm">Describe el proyecto que quieres crear y yo generaré una estructura completa con tareas, fechas y equipo.</p>
+              <p class="text-sm">Describe el proyecto que quieres crear y yo generaré una estructura completa con
+                tareas, fechas y equipo.</p>
             </div>
 
             <!-- Messages -->
-            <div
-              v-for="(message, index) in messages"
-              :key="index"
-              :class="[
-                'flex',
-                message.type === 'user' ? 'justify-end' : 'justify-start'
-              ]"
-            >
-              <div
-                :class="[
-                  'max-w-[80%] px-4 py-2 rounded-lg',
-                  message.type === 'user'
-                    ? 'bg-blue-500 text-white'
-                    : message.type === 'error'
+            <div v-for="(message, index) in messages" :key="index" :class="[
+              'flex',
+              message.type === 'user' ? 'justify-end' : 'justify-start'
+            ]">
+              <div :class="[
+                'max-w-[80%] px-4 py-2 rounded-lg',
+                message.type === 'user'
+                  ? 'bg-blue-500 text-white'
+                  : message.type === 'error'
                     ? 'bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-200 border border-red-200 dark:border-red-800'
                     : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
-                ]"
-              >
+              ]">
                 <p class="text-sm whitespace-pre-wrap">{{ message.content }}</p>
                 <span class="text-xs opacity-75 mt-1 block">{{ formatTime(message.timestamp) }}</span>
               </div>
@@ -186,20 +162,14 @@
           <!-- Input Area -->
           <div class="border-t border-gray-200 dark:border-gray-700 p-4">
             <div class="flex space-x-3">
-                <textarea
-                v-model="currentPrompt"
+              <textarea v-model="currentPrompt"
                 placeholder="Describe tu proyecto (ej: 'Crear una aplicación web de e-commerce con carrito de compras')"
                 class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
-                @keyup.enter="generateProject"
-                :disabled="isGenerating"
-              >
+                @keyup.enter="generateProject" :disabled="isGenerating">
 
               </textarea>
-              <button
-                @click="generateProject"
-                :disabled="!currentPrompt.trim() || isGenerating"
-                class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
+              <button @click="generateProject" :disabled="!currentPrompt.trim() || isGenerating"
+                class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed">
                 <i class="pi pi-send mr-2"></i>
                 Generar
               </button>
@@ -214,10 +184,8 @@
           <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
             Vista previa del proyecto generado
           </h3>
-          <button
-            @click="clearGenerated"
-            class="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-          >
+          <button @click="clearGenerated"
+            class="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
             <i class="pi pi-times mr-1"></i>
             Limpiar
           </button>
@@ -240,11 +208,8 @@
               Tareas ({{ generatedProject.tasks.length }})
             </h5>
             <div class="space-y-2 max-h-32 overflow-y-auto custom-scrollbar">
-              <div
-                v-for="task in generatedProject.tasks"
-                :key="task.title"
-                class="flex items-center justify-between text-sm"
-              >
+              <div v-for="task in generatedProject.tasks" :key="task.title"
+                class="flex items-center justify-between text-sm">
                 <span class="text-gray-700 dark:text-gray-300">{{ task.title }}</span>
                 <span class="text-gray-500 dark:text-gray-400">{{ task.duration }}d</span>
               </div>
@@ -257,11 +222,8 @@
               Equipo ({{ generatedProject.teamMembers.length }})
             </h5>
             <div class="flex flex-wrap gap-2">
-              <span
-                v-for="member in generatedProject.teamMembers"
-                :key="member.name"
-                class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200"
-              >
+              <span v-for="member in generatedProject.teamMembers" :key="member.name"
+                class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200">
                 {{ member.name }} - {{ member.role }}
               </span>
             </div>
@@ -278,19 +240,12 @@
               <label class="block text-sm font-medium text-blue-800 dark:text-blue-200 mb-1">
                 Fecha de inicio del proyecto
               </label>
-              <input
-                v-model="importStartDate"
-                type="date"
-                class="w-full px-3 py-2 border border-blue-300 dark:border-blue-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-blue-900/30 dark:text-blue-100"
-              />
+              <input v-model="importStartDate" type="date"
+                class="w-full px-3 py-2 border border-blue-300 dark:border-blue-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-blue-900/30 dark:text-blue-100" />
             </div>
             <div class="flex items-center">
-              <input
-                v-model="includeTeamMembers"
-                type="checkbox"
-                id="includeTeam"
-                class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-              />
+              <input v-model="includeTeamMembers" type="checkbox" id="includeTeam"
+                class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded" />
               <label for="includeTeam" class="ml-2 text-sm text-blue-800 dark:text-blue-200">
                 Incluir miembros del equipo sugeridos
               </label>
@@ -303,30 +258,20 @@
     <!-- Footer Actions -->
     <template #footer>
       <div class="flex justify-between">
-        <button
-          @click="handleClose"
-          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-        >
+        <button @click="handleClose"
+          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
           Cancelar
         </button>
-        
+
         <div class="flex space-x-3">
-          <button
-            v-if="generatedProject"
-            @click="regenerateProject"
-            :disabled="isGenerating"
-            class="px-4 py-2 text-sm font-medium text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/30 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
+          <button v-if="generatedProject" @click="regenerateProject" :disabled="isGenerating"
+            class="px-4 py-2 text-sm font-medium text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/30 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed">
             <i class="pi pi-refresh mr-2"></i>
             Regenerar
           </button>
-          
-          <button
-            v-if="generatedProject"
-            @click="confirmImport"
-            :disabled="isImporting"
-            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
+
+          <button v-if="generatedProject" @click="confirmImport" :disabled="isImporting"
+            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed">
             <LoadingSpinner v-if="isImporting" size="xs" color="white" class="mr-2" />
             <i v-else class="pi pi-check mr-2"></i>
             {{ isImporting ? 'Importando...' : 'Importar Proyecto' }}
@@ -337,16 +282,13 @@
   </ResponsiveModal>
 
   <!-- Confirmation Dialog -->
-  <ResponsiveModal
-    v-model:visible="showConfirmDialog"
-    title="Confirmar importación"
-    size="md"
-  >
+  <ResponsiveModal v-model:visible="showConfirmDialog" title="Confirmar importación" size="md">
     <div class="space-y-4">
       <p class="text-gray-700 dark:text-gray-300">
-        ¿Estás seguro de que quieres importar este proyecto? Se creará un nuevo proyecto con todas las tareas y configuraciones generadas por la IA.
+        ¿Estás seguro de que quieres importar este proyecto? Se creará un nuevo proyecto con todas las tareas y
+        configuraciones generadas por la IA.
       </p>
-      
+
       <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
         <div class="text-sm">
           <div><strong>Proyecto:</strong> {{ generatedProject?.name }}</div>
@@ -361,17 +303,12 @@
 
     <template #footer>
       <div class="flex justify-end space-x-3">
-        <button
-          @click="showConfirmDialog = false"
-          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-        >
+        <button @click="showConfirmDialog = false"
+          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
           Cancelar
         </button>
-        <button
-          @click="importProject"
-          :disabled="isImporting"
-          class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
+        <button @click="importProject" :disabled="isImporting"
+          class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed">
           <LoadingSpinner v-if="isImporting" size="xs" color="white" class="mr-2" />
           {{ isImporting ? 'Importando...' : 'Confirmar' }}
         </button>
@@ -380,10 +317,7 @@
   </ResponsiveModal>
 
   <!-- AI Configuration Modal -->
-  <AIConfigurationModal
-    v-model:visible="showAIConfig"
-    @configuration-updated="handleConfigurationUpdate"
-  />
+  <AIConfigurationModal v-model:visible="showAIConfig" @configuration-updated="handleConfigurationUpdate" />
 </template>
 
 <script setup>
@@ -393,6 +327,7 @@ import ResponsiveModal from './ResponsiveModal.vue'
 import LoadingSpinner from './LoadingSpinner.vue'
 import AIConfigurationModal from './AIConfigurationModal.vue'
 import { aiService } from '../../services/aiService.js'
+import { useAIConfiguration } from '../../composables/useAIConfiguration.js'
 
 const props = defineProps({
   visible: {
@@ -404,10 +339,10 @@ const props = defineProps({
 const emit = defineEmits(['update:visible', 'project-imported'])
 
 const store = useStore()
+const aiConfig = useAIConfiguration()
 
 // Reactive state
 const isVisible = ref(props.visible)
-const isConfigured = ref(false)
 const isConfiguring = ref(false)
 const isGenerating = ref(false)
 const isImporting = ref(false)
@@ -417,7 +352,6 @@ const showAIConfig = ref(false)
 
 const apiKey = ref('')
 const selectedProvider = ref('openai')
-const currentProvider = ref('openai')
 const currentPrompt = ref('')
 const selectedComplexity = ref('detailed')
 const messages = ref([])
@@ -437,7 +371,7 @@ const availableProviders = [
   {
     key: 'gemini',
     name: 'Google Gemini',
-    description: 'Gemini Pro',
+    description: 'Gemini 1.5 Flash',
     label: 'Clave API de Gemini',
     placeholder: 'AIza...'
   }
@@ -464,7 +398,7 @@ const complexityLevels = [
 
 // Computed properties
 const canGenerate = computed(() => {
-  return isConfigured.value && currentPrompt.value.trim() && !isGenerating.value
+  return aiConfig.isConfigured.value && currentPrompt.value.trim() && !isGenerating.value
 })
 
 const selectedProviderInfo = computed(() => {
@@ -472,14 +406,16 @@ const selectedProviderInfo = computed(() => {
 })
 
 const configuredProviders = computed(() => {
-  const status = aiService.getProviderStatus()
-  return status.configured
+  const status = aiConfig.getStatus()
+  return status.configuredProviders
 })
 
 const currentProviderName = computed(() => {
-  const provider = availableProviders.find(p => p.key === currentProvider.value)
+  const provider = availableProviders.find(p => p.key === aiConfig.currentProvider.value)
   return provider ? provider.name : 'Desconocido'
 })
+
+const isConfigured = computed(() => aiConfig.isConfigured.value)
 
 // Watch for prop changes
 watch(() => props.visible, (newValue) => {
@@ -501,46 +437,74 @@ const configureAPI = async () => {
   if (!apiKey.value.trim()) return
 
   isConfiguring.value = true
+  
+  // Add a message to show we're starting the configuration
+  addMessage('system', `🔧 Configurando ${selectedProviderInfo.value.name}...`)
+  
   try {
-    // Configure the selected provider
-    const config = {}
+    // Prepare configuration
+    const config = {
+      defaultProvider: selectedProvider.value
+    }
+
     if (selectedProvider.value === 'openai') {
       config.openaiKey = apiKey.value.trim()
-      config.defaultProvider = 'openai'
     } else if (selectedProvider.value === 'gemini') {
       config.geminiKey = apiKey.value.trim()
-      config.defaultProvider = 'gemini'
     }
-    
-    aiService.configure(config)
-    
-    // Test the connection
-    const testResult = await aiService.testConnection()
-    
-    if (testResult.success) {
-      isConfigured.value = true
-      currentProvider.value = selectedProvider.value
-      addMessage('system', `✅ ${selectedProviderInfo.value.name} configurado correctamente. ¡Ya puedes generar proyectos!`)
+
+    // Configure using the composable
+    const result = await aiConfig.configureAI(config, true)
+
+    if (result.success) {
+      let successMessage = `✅ ${selectedProviderInfo.value.name} configurado correctamente. ¡Ya puedes generar proyectos!`
+      if (result.persisted) {
+        successMessage += ' La configuración se ha guardado para futuras sesiones.'
+      } else {
+        successMessage += ' (Nota: La configuración no se pudo guardar permanentemente)'
+      }
+
+      addMessage('system', successMessage)
       apiKey.value = '' // Clear the API key from memory for security
       showProviderSelector.value = false
     } else {
-      throw new Error(testResult.error)
+      // Show the specific error from the result
+      addMessage('error', `❌ Error al configurar ${selectedProviderInfo.value.name}: ${result.error}`)
     }
   } catch (error) {
-    addMessage('error', `Error al configurar ${selectedProviderInfo.value.name}: ${error.message}`)
+    console.error('Unexpected error in configureAPI:', error)
+    addMessage('error', `❌ Error inesperado al configurar ${selectedProviderInfo.value.name}: ${error.message}`)
   } finally {
     isConfiguring.value = false
   }
 }
 
 const switchProvider = async (provider) => {
-  try {
-    aiService.setProvider(provider)
-    currentProvider.value = provider
+  const result = aiConfig.switchProvider(provider)
+
+  if (result.success) {
     showProviderSelector.value = false
     addMessage('system', `🔄 Cambiado a ${getProviderDisplayName(provider)}`)
-  } catch (error) {
-    addMessage('error', `Error al cambiar proveedor: ${error.message}`)
+  } else {
+    addMessage('error', `Error al cambiar proveedor: ${result.error}`)
+  }
+}
+
+const clearStoredConfiguration = () => {
+  const result = aiConfig.clearStoredConfiguration()
+
+  if (result.success) {
+    let message = '🗑️ Configuración guardada eliminada.'
+
+    if (result.reloaded) {
+      message += ` Recargado desde ${result.newSource === 'env' ? 'variables de entorno' : 'configuración por defecto'}.`
+    } else {
+      message += ' No hay configuración de respaldo disponible.'
+    }
+
+    addMessage('system', message)
+  } else {
+    addMessage('error', `Error al eliminar la configuración guardada: ${result.error}`)
   }
 }
 
@@ -550,17 +514,13 @@ const getProviderDisplayName = (provider) => {
 }
 
 const handleConfigurationUpdate = (event) => {
-  // Refresh the configuration status
-  isConfigured.value = aiService.isReady()
-  
-  if (isConfigured.value) {
-    currentProvider.value = aiService.getCurrentProvider()
-    
-    if (event.action === 'switch') {
-      addMessage('system', `🔄 Cambiado a ${getProviderDisplayName(event.provider)}`)
-    } else {
-      addMessage('system', `✅ ${getProviderDisplayName(event.provider)} configurado correctamente`)
-    }
+  // Reload configuration to get the latest status
+  aiConfig.loadConfiguration()
+
+  if (event.action === 'switch') {
+    addMessage('system', `🔄 Cambiado a ${getProviderDisplayName(event.provider)}`)
+  } else {
+    addMessage('system', `✅ ${getProviderDisplayName(event.provider)} configurado correctamente`)
   }
 }
 
@@ -593,12 +553,12 @@ const generateProject = async () => {
 
   const prompt = currentPrompt.value.trim()
   currentPrompt.value = ''
-  
+
   // Add user message
   addMessage('user', prompt)
-  
+
   isGenerating.value = true
-  
+
   try {
     const options = {
       complexity: selectedComplexity.value,
@@ -608,11 +568,11 @@ const generateProject = async () => {
 
     // Use the unified AI service with fallback
     const result = await aiService.generateProjectWithFallback(prompt, options)
-    
+
     if (result.success) {
       generatedProject.value = result.project
       let successMessage = `✅ ¡Proyecto generado exitosamente con ${getProviderDisplayName(result.provider)}! Se crearon ${result.project.tasks.length} tareas con una duración estimada de ${result.project.estimatedDuration} días laborales.`
-      
+
       // Add attempt information if multiple providers were tried
       if (result.attempts.length > 1) {
         const failedAttempts = result.attempts.filter(a => !a.success).length
@@ -620,25 +580,25 @@ const generateProject = async () => {
           successMessage += ` (Completado después de ${failedAttempts} intento${failedAttempts > 1 ? 's' : ''} fallido${failedAttempts > 1 ? 's' : ''})`
         }
       }
-      
+
       addMessage('system', successMessage)
-      
+
       // Set default start date to tomorrow
       const tomorrow = new Date()
       tomorrow.setDate(tomorrow.getDate() + 1)
       importStartDate.value = tomorrow.toISOString().split('T')[0]
-      
+
     } else {
       // Enhanced error reporting with provider information
       const primaryError = result.errors.length > 0 ? result.errors[result.errors.length - 1] : 'Error desconocido'
       addMessage('error', `❌ Error al generar el proyecto: ${primaryError}`)
-      
+
       // Show attempt information
       if (result.attempts.length > 0) {
         const totalTime = result.attempts.reduce((sum, attempt) => sum + attempt.time, 0)
         addMessage('system', `Se probaron ${result.attempts.length} proveedor${result.attempts.length > 1 ? 'es' : ''}. Tiempo total: ${Math.round(totalTime / 1000)}s`)
       }
-      
+
       // Show specific guidance based on error type
       if (result.errors.some(e => e.includes('quota') || e.includes('QUOTA'))) {
         addMessage('system', '💡 Sugerencia: Verifica tu configuración de facturación')
@@ -650,7 +610,7 @@ const generateProject = async () => {
     }
   } catch (error) {
     addMessage('error', `❌ Error inesperado: ${error.message}`)
-    
+
     // Log detailed error for debugging
     console.error('AI Project Generation Error:', {
       error: error.message,
@@ -684,7 +644,7 @@ const importProject = async () => {
   if (!generatedProject.value) return
 
   isImporting.value = true
-  
+
   try {
     // Prepare project data for import
     const projectData = {
@@ -699,21 +659,21 @@ const importProject = async () => {
 
     // Import through the store
     await store.dispatch('projects/importProject', projectData)
-    
+
     // Show success message
     addMessage('system', '✅ ¡Proyecto importado exitosamente!')
-    
+
     // Emit event to parent
     emit('project-imported', projectData)
-    
+
     // Close dialogs
     showConfirmDialog.value = false
-    
+
     // Close main modal after a short delay
     setTimeout(() => {
       isVisible.value = false
     }, 1500)
-    
+
   } catch (error) {
     addMessage('error', `❌ Error al importar el proyecto: ${error.message}`)
     showConfirmDialog.value = false
@@ -724,37 +684,19 @@ const importProject = async () => {
 
 // Initialize component
 onMounted(() => {
-  // Load configuration from environment variables
-  const openaiKey = import.meta.env.VITE_OPENAI_API_KEY
-  const geminiKey = import.meta.env.VITE_GEMINI_API_KEY
-  const defaultProvider = import.meta.env.VITE_DEFAULT_AI_PROVIDER || 'openai'
-  
-  if (openaiKey || geminiKey) {
-    const config = {
-      defaultProvider
-    }
-    
-    if (openaiKey) config.openaiKey = openaiKey
-    if (geminiKey) config.geminiKey = geminiKey
-    
-    try {
-      aiService.configure(config)
-      
-      // Check if any provider is ready
-      if (aiService.isReady()) {
-        isConfigured.value = true
-        currentProvider.value = aiService.getCurrentProvider()
-        
-        const status = aiService.getProviderStatus()
-        const configuredNames = status.configured.map(getProviderDisplayName).join(', ')
-        addMessage('system', `✅ ${configuredNames} ya configurado${status.configured.length > 1 ? 's' : ''}. ¡Puedes generar proyectos!`)
-      }
-    } catch (error) {
-      console.error('Error loading AI configuration:', error)
-    }
+  // Load configuration using the composable
+  const result = aiConfig.loadConfiguration()
+
+  if (result.success) {
+    const configuredNames = result.providers.map(getProviderDisplayName).join(', ')
+    const sourceLabel = result.source === 'stored' ? 'configuración personalizada' : 'variables de entorno'
+    addMessage('system', `✅ ${configuredNames} configurado${result.providers.length > 1 ? 's' : ''} desde ${sourceLabel}. ¡Puedes generar proyectos!`)
+  } else if (result.error !== 'No API keys found') {
+    addMessage('error', `Error al cargar la configuración de IA: ${result.error}`)
   }
-  
+
   // Set default provider selection
+  const defaultProvider = import.meta.env.VITE_DEFAULT_AI_PROVIDER || 'openai'
   selectedProvider.value = defaultProvider
 })
 </script>
@@ -808,8 +750,13 @@ onMounted(() => {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes slideUp {
@@ -817,6 +764,7 @@ onMounted(() => {
     opacity: 0;
     transform: translateY(20px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
