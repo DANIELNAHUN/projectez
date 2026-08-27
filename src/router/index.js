@@ -58,6 +58,19 @@ const routes = [
     name: 'ColorDemo',
     component: () => import('../components/ColorPaletteDemo.vue'),
     meta: { title: 'Demostración de Colores' }
+  },
+  {
+    path: '/quotation-config',
+    name: 'QuotationConfig',
+    component: () => import('../views/QuotationConfig.vue'),
+    meta: { title: 'Configuración de Cotización' }
+  },
+  {
+    path: '/projects/:id/quotation',
+    name: 'ProjectQuotation',
+    component: () => import('../components/quotation/ProjectQuotation.vue'),
+    props: route => ({ projectId: route.params.id }),
+    meta: { title: 'Cotización del Proyecto' }
   }
 ]
 

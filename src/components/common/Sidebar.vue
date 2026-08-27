@@ -165,6 +165,12 @@ const navigationItems = [
     path: '/gantt',
     label: 'Diagrama de Gantt',
     icon: 'pi pi-chart-bar'
+  },
+  {
+    name: 'quotation',
+    path: '/quotation-config',
+    label: 'Cotización',
+    icon: 'pi pi-calculator'
   }
 ]
 

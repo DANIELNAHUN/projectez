@@ -88,12 +88,21 @@
     </div>
 
     <template #footer>
-      <button
-        @click="$emit('view', project)"
-        class="w-full bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white py-2.5 px-4 rounded-lg transition-colors duration-200 font-medium text-sm"
-      >
-        Ver Proyecto
-      </button>
+      <div class="flex gap-2">
+        <button
+          @click="$emit('view', project)"
+          class="flex-1 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white py-2.5 px-4 rounded-lg transition-colors duration-200 font-medium text-sm"
+        >
+          Ver Proyecto
+        </button>
+        <router-link
+          :to="`/projects/${project.id}/quotation`"
+          class="flex-1 text-center bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 py-2.5 px-4 rounded-lg transition-colors duration-200 font-medium text-sm"
+          @click.stop
+        >
+          Ver Cotización
+        </router-link>
+      </div>
     </template>
   </ResponsiveCard>
 </template>
